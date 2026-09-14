@@ -1,0 +1,6 @@
+{
+  "name": "PROJECTS MANDATORY",
+  "description": "Official single-artist digital music marketplace. Buy original high-quality tracks and download instantly with secure PayChangu Malawi payments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

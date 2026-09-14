@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /music
+Allow: /about
+Allow: /contact
+Allow: /privacy
+Allow: /terms
+Disallow: /admin/
+Disallow: /api/download/
+Disallow: /api/admin/
+Disallow: /checkout/
+Disallow: /payment/
+
+Sitemap: https://projectsmandatory.com/sitemap.xml

@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile stored in Firestore",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Song": {
+      "title": "Song",
+      "description": "Single-artist master track metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "featuredArtists": { "type": "string" },
+        "description": { "type": "string" },
+        "genre": { "type": "string" },
+        "priceMwk": { "type": "number" },
+        "coverUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "fileFormat": { "type": "string" },
+        "releaseDate": { "type": "string" },
+        "producer": { "type": "string" },
+        "lyrics": { "type": "string" },
+        "published": { "type": "boolean" },
+        "isLatest": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "downloadCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "priceMwk", "published"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Music purchase order record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "songId": { "type": "string" },
+        "songTitle": { "type": "string" },
+        "songCover": { "type": "string" },
+        "amountMwk": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"] },
+        "paymentProvider": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "txRef": { "type": "string" },
+        "downloadToken": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "paidAt": { "type": "string" }
+      },
+      "required": ["id", "customerEmail", "songId", "amountMwk", "status", "txRef"]
+    },
+    "PaymentEvent": {
+      "title": "PaymentEvent",
+      "description": "Idempotent payment webhook event logging",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" },
+        "eventType": { "type": "string" },
+        "processed": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["transactionId", "eventType", "processed", "createdAt"]
+    },
+    "DownloadToken": {
+      "title": "DownloadToken",
+      "description": "Encrypted short-lived authorization token for file downloads",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "songId": { "type": "string" },
+        "tokenHash": { "type": "string" },
+        "downloadCount": { "type": "number" },
+        "maxDownloads": { "type": "number" },
+        "expiresAt": { "type": "string" },
+        "usedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderId", "songId", "tokenHash", "expiresAt"]
+    },
+    "ArtistSettings": {
+      "title": "ArtistSettings",
+      "description": "Artist biography and platform metadata",
+      "type": "object",
+      "properties": {
+        "artistName": { "type": "string" },
+        "artistBio": { "type": "string" },
+        "profileImage": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["artistName"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/songs/{songId}": {
+      "schema": { "$ref": "#/entities/Song" },
+      "description": "Published single-artist song catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Purchases and order ledger"
+    },
+    "/paymentEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/PaymentEvent" },
+      "description": "Server-side PayChangu webhook event logs"
+    },
+    "/downloadTokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/DownloadToken" },
+      "description": "Protected short-lived download authorization tokens"
+    },
+    "/artistSettings/current": {
+      "schema": { "$ref": "#/entities/ArtistSettings" },
+      "description": "Artist profile settings and contact details"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'petedianolabs@gmail.com'
+      );
+    }
+
+    // Cover Artwork - Publicly readable for marketplace browsing
+    match /covers/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Private Studio Music Master Files - NEVER directly readable by public clients!
+    // Files are served strictly via the server-side authorized download endpoint (/api/download/:token)
+    match /music/private/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
