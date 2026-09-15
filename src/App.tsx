@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Song, Order, ArtistSettings } from './types';
 import { api } from './lib/api';
+import {
+  subscribePublishedSongs,
+  subscribeArtistSettings,
+  seedInitialDataIfEmpty,
+} from './lib/firebase';
 import { AuthProvider } from './context/AuthContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { ToastProvider, useToast } from './context/ToastContext';
@@ -55,29 +60,52 @@ function AppContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch initial marketplace data
-  const fetchData = async () => {
+  // Real-time Firestore synchronizer
+  useEffect(() => {
     setIsLoading(true);
     setError(null);
-    try {
-      const [fetchedSongs, settings] = await Promise.all([
-        api.getSongs(),
-        api.getArtistSettings().catch(() => null),
-      ]);
-      setSongs(fetchedSongs);
+
+    // Subscribe to published songs in real-time
+    const unsubscribeSongs = subscribePublishedSongs(
+      (realtimeSongs) => {
+        if (realtimeSongs && realtimeSongs.length > 0) {
+          setSongs(realtimeSongs);
+          setIsLoading(false);
+        } else {
+          // If Firestore is empty or initializing, check server/initial
+          api.getSongs().then((apiSongs) => {
+            if (apiSongs.length > 0) {
+              setSongs(apiSongs);
+            }
+            setIsLoading(false);
+          }).catch(() => {
+            setIsLoading(false);
+          });
+        }
+      },
+      (err) => {
+        console.warn('Real-time sync notice:', err.message);
+        api.getSongs().then((fallbackSongs) => {
+          setSongs(fallbackSongs);
+          setIsLoading(false);
+        }).catch((apiErr) => {
+          setError(apiErr.message || 'Could not load song catalog');
+          setIsLoading(false);
+        });
+      }
+    );
+
+    // Subscribe to artist settings
+    const unsubscribeSettings = subscribeArtistSettings((settings) => {
       if (settings) {
         setArtistSettings(settings);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not connect to store server';
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    });
 
-  useEffect(() => {
-    fetchData();
+    return () => {
+      unsubscribeSongs();
+      unsubscribeSettings();
+    };
   }, []);
 
   // Action handlers
@@ -128,8 +156,8 @@ function AppContent() {
         <div className="py-12">
           <ErrorState
             title="Connection Error"
-            error="Could not connect to the PROJECTS MANDATORY music server. Please check your connection."
-            onRetry={fetchData}
+            error="Could not connect to the PROJECTS MANDATORY music database. Please check your connection."
+            onRetry={() => window.location.reload()}
           />
         </div>
       );
@@ -241,7 +269,6 @@ function AppContent() {
     if (currentPath.startsWith('/download/')) {
       const token = completedPurchaseToken || currentPath.split('/download/')[1];
       if (!completedOrder || !token) {
-        // Fallback or guest direct link
         return (
           <MyPurchasesPage
             onExploreMusic={() => navigate('/music')}

@@ -1,12 +1,24 @@
 import { Song, Order, Customer, ArtistSettings, PaymentMethod } from '../types';
+import {
+  saveSongToFirestore,
+  deleteSongFromFirestore,
+  saveArtistSettingsToFirestore,
+  seedInitialDataIfEmpty,
+} from './firebase';
 
 export const api = {
   // Songs
   async getSongs(): Promise<Song[]> {
-    const res = await fetch('/api/songs');
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to fetch songs');
-    return data.songs;
+    try {
+      const res = await fetch('/api/songs');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.songs)) {
+        return data.songs;
+      }
+    } catch (err) {
+      console.warn('API getSongs note:', err);
+    }
+    return [];
   },
 
   async getSong(id: string): Promise<Song> {
@@ -103,7 +115,7 @@ export const api = {
     return `/api/download/${encodeURIComponent(purchaseToken)}`;
   },
 
-  // Admin APIs
+  // Admin APIs (Sync with backend & Firestore)
   admin: {
     async login(password: string): Promise<{ token: string; artistName: string }> {
       const res = await fetch('/api/admin/login', {
@@ -145,6 +157,14 @@ export const api = {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to create song');
+      
+      // Also persist to Firestore
+      try {
+        await saveSongToFirestore(data.song);
+      } catch (err) {
+        console.warn('Firestore direct sync notice:', err);
+      }
+
       return data.song;
     },
 
@@ -159,6 +179,14 @@ export const api = {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to update song');
+
+      // Also persist to Firestore
+      try {
+        await saveSongToFirestore(data.song);
+      } catch (err) {
+        console.warn('Firestore direct sync notice:', err);
+      }
+
       return data.song;
     },
 
@@ -169,6 +197,13 @@ export const api = {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to delete song');
+
+      // Also delete from Firestore
+      try {
+        await deleteSongFromFirestore(id);
+      } catch (err) {
+        console.warn('Firestore direct delete notice:', err);
+      }
     },
 
     async getOrders(token: string): Promise<Order[]> {
@@ -223,6 +258,13 @@ export const api = {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to update settings');
+
+      try {
+        await saveArtistSettingsToFirestore(data.settings);
+      } catch (err) {
+        console.warn('Firestore direct settings sync notice:', err);
+      }
+
       return data.settings;
     },
   },

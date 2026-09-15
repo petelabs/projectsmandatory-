@@ -19,6 +19,8 @@ export interface Song {
   coverImage: string;
   description: string;
   lyrics?: string;
+  audioFilePath?: string; // Firebase Storage path or download URL
+  audioFileName?: string;
   fileFormat: string; // e.g. "320kbps MP3 + WAV Master"
   fileSize: string; // e.g. "9.8 MB"
   duration?: string; // e.g. "3:45"

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Shield, Smartphone, Heart, ArrowUpRight } from 'lucide-react';
+import { Disc, Shield, ArrowUpRight } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface FooterProps {
@@ -53,7 +53,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={() => onNavigate('/music?filter=latest')}
                   className="hover:text-white transition"
                 >
-                  Latest Release
+                  Latest Releases
                 </button>
               </li>
               <li>
@@ -61,7 +61,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   onClick={() => onNavigate('/music?filter=popular')}
                   className="hover:text-white transition"
                 >
-                  Popular Downloads
+                  Popular Tracks
                 </button>
               </li>
               <li>
@@ -135,11 +135,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© 2026 PROJECTS MANDATORY. All master rights reserved. Non-streaming digital music store.</p>
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              Crafted with <Heart className="w-3 h-3 text-rose-500 fill-rose-500" /> for music ownership
-            </span>
+          <p>© 2026 PROJECTS MANDATORY. All rights reserved. Non-streaming digital music store.</p>
+          <div className="flex items-center gap-4 text-[11px] text-slate-500">
+            <span>Official Artist Direct Store</span>
+            <span>•</span>
+            <span>Lilongwe & Blantyre, Malawi</span>
           </div>
         </div>
       </div>
