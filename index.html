@@ -3,27 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-    <title>PROJECTS MANDATORY | Music That Belongs To You</title>
-    <meta name="description" content="Official single-artist digital music marketplace. Buy original high-quality tracks and download instantly with secure PayChangu Malawi payments." />
-    <meta name="keywords" content="PROJECTS MANDATORY, Malawi Music, Buy Music Online, PayChangu, Airtel Money, TNM Mpamba, African Music Store, Studio Master MP3" />
+    <title>PROJECTS MANDATORY | Official Music Store & Studio Master Downloads</title>
+    <meta name="description" content="Official single-artist digital music store for PROJECTS MANDATORY. Buy original high-fidelity tracks directly. Instant mobile money downloads via PayChangu (Airtel Money, TNM Mpamba, Visa & Mastercard)." />
+    <meta name="keywords" content="PROJECTS MANDATORY, PROJECTS MANDATORY music, Malawi music download, buy music Malawi, PayChangu music, Airtel Money Malawi, TNM Mpamba music, African Afro-fusion, studio master WAV MP3, Lilongwe artist, Blantyre music store" />
     <meta name="author" content="PROJECTS MANDATORY" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="canonical" href="https://projectsmandatory.com" />
 
-    <!-- Open Graph / Facebook -->
+    <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://projectsmandatory.com" />
-    <meta property="og:title" content="PROJECTS MANDATORY | Official Music Store" />
-    <meta property="og:description" content="Discover, buy, and download authentic music directly from PROJECTS MANDATORY. High fidelity studio masters delivered instantly." />
+    <meta property="og:site_name" content="PROJECTS MANDATORY" />
+    <meta property="og:locale" content="en_MW" />
+    <meta property="og:title" content="PROJECTS MANDATORY | Official Music Store & Master Downloads" />
+    <meta property="og:description" content="Direct artist store. Own uncompressed studio master audio recordings. Instant checkout with Airtel Money, TNM Mpamba, Visa and Mastercard via PayChangu." />
     <meta property="og:image" content="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1200&auto=format&fit=crop" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="PROJECTS MANDATORY Official Music Store" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@projectsmandatory" />
     <meta name="twitter:creator" content="@projectsmandatory" />
     <meta name="twitter:title" content="PROJECTS MANDATORY | Official Music Store" />
-    <meta name="twitter:description" content="Buy original studio tracks directly from PROJECTS MANDATORY with instant Malawi mobile money downloads." />
+    <meta name="twitter:description" content="Instant downloads of high-fidelity studio recordings with Airtel Money, TNM Mpamba, and cards via PayChangu." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1200&auto=format&fit=crop" />
+
+    <!-- Performance & Asset Preconnects -->
+    <link rel="preconnect" href="https://encrypted-tbn0.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://encrypted-tbn0.gstatic.com" />
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
 
     <!-- Mobile & PWA Configuration -->
     <meta name="theme-color" content="#020617" />
@@ -34,30 +48,51 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
 
-    <!-- Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-
-    <!-- Schema.org Structured Data -->
+    <!-- Schema.org Comprehensive Structured Data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "MusicGroup",
-      "name": "PROJECTS MANDATORY",
-      "description": "Official artist profile and digital music storefront.",
-      "genre": ["Afro-fusion", "Contemporary African", "Pop"],
-      "url": "https://projectsmandatory.com",
-      "sameAs": [
-        "https://instagram.com/projectsmandatory",
-        "https://youtube.com/@projectsmandatory"
-      ],
-      "offers": {
-        "@type": "AggregateOffer",
-        "priceCurrency": "MWK",
-        "availability": "https://schema.org/InStock",
-        "offerCount": "10"
-      }
+      "@graph": [
+        {
+          "@type": "MusicGroup",
+          "@id": "https://projectsmandatory.com/#artist",
+          "name": "PROJECTS MANDATORY",
+          "url": "https://projectsmandatory.com",
+          "description": "Malawian recording artist and producer pioneering modern Afro-fusion and authentic studio sound.",
+          "genre": ["Afro-fusion", "Contemporary African", "Afrobeats"],
+          "sameAs": [
+            "https://instagram.com/projectsmandatory",
+            "https://youtube.com/@projectsmandatory"
+          ]
+        },
+        {
+          "@type": "MusicStore",
+          "@id": "https://projectsmandatory.com/#store",
+          "name": "PROJECTS MANDATORY Official Music Store",
+          "url": "https://projectsmandatory.com",
+          "description": "Direct-to-consumer digital audio store selling studio master tracks in FLAC and 320kbps MP3.",
+          "paymentAccepted": "PayChangu, Airtel Money, TNM Mpamba, Visa, Mastercard",
+          "currenciesAccepted": "MWK",
+          "areaServed": {
+            "@type": "AdministrativeArea",
+            "name": "Malawi"
+          },
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "MWK",
+            "availability": "https://schema.org/InStock"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://projectsmandatory.com/#website",
+          "url": "https://projectsmandatory.com",
+          "name": "PROJECTS MANDATORY",
+          "publisher": {
+            "@id": "https://projectsmandatory.com/#artist"
+          }
+        }
+      ]
     }
     </script>
   </head>

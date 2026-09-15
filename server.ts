@@ -118,15 +118,15 @@ app.get('/api/artist', (req, res) => {
   });
 });
 
-// 4. Create pending checkout order (Server-Authoritative Pricing)
+// 4. Create pending checkout order (Server-Authoritative Pricing via PayChangu)
 app.post('/api/checkout/create-order', async (req, res) => {
-  const { songId, customerName, customerEmail, customerPhone, paymentMethod, userId } = req.body;
+  const { songId, customerName, customerEmail, customerPhone, paymentMethod } = req.body;
 
   if (!songId || !customerName || !customerEmail || !customerPhone) {
     return res.status(400).json({ success: false, error: 'All customer fields and song ID are required.' });
   }
 
-  // Retrieve actual price from server state - NEVER trust frontend price
+  // Retrieve actual song from server state
   const song = songs.find(s => s.id === songId && s.isPublished);
   if (!song) {
     return res.status(404).json({ success: false, error: 'Song is currently unavailable for purchase.' });
@@ -148,7 +148,7 @@ app.post('/api/checkout/create-order', async (req, res) => {
     customerName: customerName.trim(),
     customerEmail: customerEmail.trim().toLowerCase(),
     customerPhone: customerPhone.trim(),
-    paymentMethod: paymentMethod || 'AIRTEL_MONEY',
+    paymentMethod: 'PAYCHANGU',
     status: 'PENDING',
     downloadCount: 0,
     maxDownloads: artistSettings.maxDownloadAttempts || 5,
@@ -157,7 +157,7 @@ app.post('/api/checkout/create-order', async (req, res) => {
 
   orders.unshift(newOrder);
 
-  // Optional: If PayChangu secret key is configured, create live PayChangu hosted checkout link
+  // Call PayChangu Hosted Checkout API if secret key is present
   let checkoutUrl: string | undefined;
   const paychanguSecret = process.env.PAYCHANGU_SECRET_KEY;
 
@@ -165,7 +165,10 @@ app.post('/api/checkout/create-order', async (req, res) => {
     try {
       const nameParts = customerName.trim().split(' ');
       const firstName = nameParts[0] || 'Customer';
-      const lastName = nameParts.slice(1).join(' ') || 'User';
+      const lastName = nameParts.slice(1).join(' ') || 'Supporter';
+
+      const host = req.get('host') || 'localhost:3000';
+      const protocol = req.protocol || 'https';
 
       const pcResponse = await fetch('https://api.paychangu.com/payment', {
         method: 'POST',
@@ -182,11 +185,11 @@ app.post('/api/checkout/create-order', async (req, res) => {
           last_name: lastName,
           phone: newOrder.customerPhone,
           tx_ref: newOrder.txRef,
-          callback_url: `${req.protocol}://${req.get('host')}/api/webhooks/paychangu`,
-          return_url: `${req.protocol}://${req.get('host')}/payment/status/${newOrder.txRef}`,
+          callback_url: `${protocol}://${host}/api/webhooks/paychangu`,
+          return_url: `${protocol}://${host}/payment/status/${newOrder.txRef}`,
           customization: {
             title: `PROJECTS MANDATORY - ${song.title}`,
-            description: `Original Master Recording by ${song.artist}`,
+            description: `Studio Master Recording Download (${song.fileFormat || 'HQ Audio'})`,
             logo: song.coverImage,
           },
         }),
@@ -197,7 +200,7 @@ app.post('/api/checkout/create-order', async (req, res) => {
         checkoutUrl = pcData.data.checkout_url;
       }
     } catch (pcErr) {
-      console.warn('PayChangu API initialization notice:', pcErr);
+      console.warn('PayChangu API initialization note:', pcErr);
     }
   }
 
@@ -211,16 +214,16 @@ app.post('/api/checkout/create-order', async (req, res) => {
       currency: newOrder.currency,
       customerEmail: newOrder.customerEmail,
       customerPhone: newOrder.customerPhone,
-      paymentMethod: newOrder.paymentMethod,
-      paychanguPublicKey: process.env.PAYCHANGU_PUBLIC_KEY || artistSettings.paychanguPublicKey,
+      paymentMethod: 'PAYCHANGU',
+      paychanguPublicKey: process.env.PAYCHANGU_PUBLIC_KEY || artistSettings.paychanguPublicKey || '',
       checkoutUrl,
     },
   });
 });
 
-// 5. Server-side payment verification (PayChangu verification gateway)
+// 5. Server-side payment verification (Real PayChangu verification gateway)
 app.post('/api/payments/verify', async (req, res) => {
-  const { txRef, paychanguRef, mockSuccess } = req.body;
+  const { txRef, paychanguRef } = req.body;
 
   if (!txRef) {
     return res.status(400).json({ success: false, error: 'Transaction reference is required.' });
@@ -233,21 +236,20 @@ app.post('/api/payments/verify', async (req, res) => {
 
   const order = orders[orderIndex];
 
-  // If already paid, return existing token
+  // If already paid, return existing verified token
   if (order.status === 'PAID' && order.purchaseToken) {
     return res.json({
       success: true,
       verified: true,
+      status: 'PAID',
       order,
       purchaseToken: order.purchaseToken,
     });
   }
 
-  // Server-side verification logic:
-  let paymentVerified = false;
   const paychanguSecret = process.env.PAYCHANGU_SECRET_KEY;
 
-  if (paychanguSecret && !mockSuccess) {
+  if (paychanguSecret) {
     try {
       const response = await fetch(`https://api.paychangu.com/verify-payment/${encodeURIComponent(txRef)}`, {
         headers: {
@@ -256,67 +258,94 @@ app.post('/api/payments/verify', async (req, res) => {
         },
       });
       const data = await response.json();
-      if (data.status === 'success' && (data.data?.status === 'successful' || data.data?.status === 'paid')) {
-        // Strict verification of amount and currency
-        if (Number(data.data.amount) >= order.amount && data.data.currency?.toUpperCase() === 'MWK') {
-          paymentVerified = true;
-          if (data.data.tx_ref) {
-            order.paychanguRef = data.data.tx_ref;
-          }
+
+      const paymentStatus = data.data?.status?.toLowerCase();
+
+      if (data.status === 'success' && (paymentStatus === 'successful' || paymentStatus === 'paid')) {
+        // Successful verification
+        order.status = 'PAID';
+        order.paidAt = new Date().toISOString();
+        if (data.data?.tx_ref) {
+          order.paychanguRef = data.data.tx_ref;
         }
+
+        const purchaseToken = `pm_dl_${crypto.randomBytes(24).toString('hex')}`;
+        const validityDays = artistSettings.tokenValidityDays || 30;
+        const expiresAt = Date.now() + validityDays * 24 * 60 * 60 * 1000;
+
+        order.purchaseToken = purchaseToken;
+        order.tokenExpiresAt = new Date(expiresAt).toISOString();
+
+        activeDownloadTokens.set(purchaseToken, {
+          orderId: order.id,
+          songId: order.songId,
+          customerEmail: order.customerEmail,
+          expiresAt,
+          maxDownloads: order.maxDownloads || 5,
+          downloadsUsed: 0,
+        });
+
+        // Increment song download count
+        const song = songs.find(s => s.id === order.songId);
+        if (song) {
+          song.downloadCount = (song.downloadCount || 0) + 1;
+        }
+
+        return res.json({
+          success: true,
+          verified: true,
+          status: 'PAID',
+          order,
+          purchaseToken,
+        });
+      } else if (paymentStatus === 'cancelled' || paymentStatus === 'canceled' || paymentStatus === 'user_cancelled') {
+        order.status = 'CANCELLED';
+        return res.json({
+          success: false,
+          verified: false,
+          status: 'CANCELLED',
+          order,
+          error: 'Payment was cancelled by the user. No funds were charged.',
+        });
+      } else if (paymentStatus === 'failed' || paymentStatus === 'declined') {
+        order.status = 'FAILED';
+        return res.json({
+          success: false,
+          verified: false,
+          status: 'FAILED',
+          order,
+          error: 'Payment was declined or failed at PayChangu. Please try again or check your account balance.',
+        });
+      } else {
+        // Still pending
+        return res.json({
+          success: false,
+          verified: false,
+          status: 'PENDING',
+          order,
+          error: 'Payment is pending. Please complete authorization on your mobile phone or card prompt.',
+        });
       }
-    } catch (err) {
-      console.error('PayChangu API verification error:', err);
+    } catch (err: any) {
+      console.error('PayChangu API verification network error:', err);
+      return res.status(502).json({
+        success: false,
+        verified: false,
+        status: order.status,
+        error: `Error contacting PayChangu API: ${err.message || 'Network error'}`,
+      });
     }
   } else {
-    // Sandbox / Test Mode: verified
-    paymentVerified = true;
-  }
-
-  if (!paymentVerified) {
-    order.status = 'FAILED';
-    return res.status(400).json({
+    // Note: PAYCHANGU_SECRET_KEY not set yet in environment
+    return res.json({
       success: false,
       verified: false,
-      error: 'Payment verification failed. The transaction was not marked successful by the provider.',
+      status: 'PENDING',
+      order,
+      error: 'PAYCHANGU_SECRET_KEY environment variable is pending configuration. Please add your PayChangu Secret Key to enable live payment verification.',
+      apiKeyRequired: true,
     });
   }
-
-  // Generate secure cryptographically random purchase token
-  const purchaseToken = `pm_dl_${crypto.randomBytes(24).toString('hex')}`;
-  const validityDays = artistSettings.tokenValidityDays || 30;
-  const expiresAt = Date.now() + validityDays * 24 * 60 * 60 * 1000;
-
-  order.status = 'PAID';
-  order.paidAt = new Date().toISOString();
-  order.purchaseToken = purchaseToken;
-  order.tokenExpiresAt = new Date(expiresAt).toISOString();
-  if (paychanguRef) {
-    order.paychanguRef = paychanguRef;
-  }
-
-  // Register active download token
-  activeDownloadTokens.set(purchaseToken, {
-    orderId: order.id,
-    songId: order.songId,
-    customerEmail: order.customerEmail,
-    expiresAt,
-    maxDownloads: order.maxDownloads || 5,
-    downloadsUsed: 0,
-  });
-
-  // Increment song download & popularity counter
-  const song = songs.find(s => s.id === order.songId);
-  if (song) {
-    song.downloadCount += 1;
-  }
-
-  res.json({
-    success: true,
-    verified: true,
-    order,
-    purchaseToken,
-  });
 });
 
 // 6. PayChangu Webhook Listener (Idempotent & Authenticated)

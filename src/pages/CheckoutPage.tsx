@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ShieldCheck, Lock, Smartphone, CreditCard, Building2, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Lock, Smartphone, CreditCard, Building2, Check, AlertCircle, ExternalLink } from 'lucide-react';
 import { Song, PaymentMethod } from '../types';
-import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { PayChanguLogo, PaymentMethodsBanner } from '../components/common/PaymentLogos';
 
 interface CheckoutPageProps {
   song: Song;
@@ -24,37 +24,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [customerName, setCustomerName] = useState(user?.name || '');
   const [customerEmail, setCustomerEmail] = useState(user?.email || '');
   const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('AIRTEL_MONEY');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PAYCHANGU');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  const paymentOptions: { id: PaymentMethod; title: string; subtitle: string; icon: React.ReactNode; badge?: string }[] = [
-    {
-      id: 'AIRTEL_MONEY',
-      title: 'Airtel Money',
-      subtitle: 'Instant Malawi Mobile Money push',
-      icon: <Smartphone className="w-5 h-5 text-rose-500" />,
-      badge: 'Popular',
-    },
-    {
-      id: 'TNM_MPAMBA',
-      title: 'TNM Mpamba',
-      subtitle: 'Fast Malawi Mpamba wallet checkout',
-      icon: <Smartphone className="w-5 h-5 text-emerald-400" />,
-    },
-    {
-      id: 'CARD',
-      title: 'Credit / Debit Card',
-      subtitle: 'Visa, Mastercard, Local & International',
-      icon: <CreditCard className="w-5 h-5 text-blue-400" />,
-    },
-    {
-      id: 'BANK_TRANSFER',
-      title: 'PayChangu Direct',
-      subtitle: 'Bank transfer / Online gateway',
-      icon: <Building2 className="w-5 h-5 text-orange-400" />,
-    },
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +41,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     if (!customerPhone.trim() || customerPhone.length < 7) {
-      setErrorMessage('Please enter a valid phone number (e.g., +265 999 123 456)');
+      setErrorMessage('Please enter a valid phone number (e.g., +265 999 123 456 or 0888 123 456)');
       return;
     }
 
@@ -82,7 +54,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         customerName,
         customerEmail,
         customerPhone,
-        paymentMethod,
+        paymentMethod: 'PAYCHANGU',
       });
 
       // 2. Direct to payment processing / verification screen with transaction reference
@@ -106,7 +78,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white py-1.5 transition"
       >
         <ArrowLeft className="w-4 h-4" />
-        <span>Cancel & Return</span>
+        <span>Cancel & Return to Song Details</span>
       </button>
 
       {/* Main Checkout Container */}
@@ -116,10 +88,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
           <div>
             <h1 className="text-2xl font-extrabold text-white font-['Syne',sans-serif]">
-              Checkout & Download
+              Checkout & Studio Master Download
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              One-time payment for direct studio audio file ownership.
+              One-time payment for direct master audio file ownership.
             </p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 text-xs font-semibold self-start sm:self-center">
@@ -133,20 +105,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700">
               <img
-                src={song.coverImage}
+                src={song.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop'}
                 alt={song.title}
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="min-w-0">
-              <span className="text-[11px] font-mono text-blue-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-mono text-teal-400 uppercase tracking-wider block">
                 Digital Audio Download
               </span>
               <h3 className="text-sm sm:text-base font-bold text-white truncate">
                 {song.title}
               </h3>
               <p className="text-xs text-slate-400 truncate font-medium">
-                {song.artist} • {song.fileFormat}
+                {song.artist} • {song.fileFormat || 'Lossless FLAC + 320kbps MP3'}
               </p>
             </div>
           </div>
@@ -190,65 +162,43 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </div>
 
             <Input
-              label="Phone Number (Malawi Mobile Money)"
+              label="Phone Number (Malawi Mobile Money or Card Holder)"
               type="tel"
               placeholder="e.g. +265 999 123 456 or 0888 123 456"
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
-              helperText="Used to trigger mobile money approval prompt."
+              helperText="Used for PayChangu mobile money USSD prompt or card billing notification."
               required
             />
           </div>
 
-          {/* Payment Method Selection */}
+          {/* Payment Method - Master PayChangu Gateway */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              2. Select Payment Method (Malawi)
+              2. Payment Provider (Master Gateway)
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paymentOptions.map((opt) => {
-                const isSelected = paymentMethod === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setPaymentMethod(opt.id)}
-                    className={`p-4 rounded-xl text-left border transition-all flex items-start justify-between min-h-[44px] ${
-                      isSelected
-                        ? 'bg-blue-950/40 border-blue-500 shadow-md shadow-blue-950/40'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 shrink-0">
-                        {opt.icon}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-white block">
-                            {opt.title}
-                          </span>
-                          {opt.badge && (
-                            <span className="text-[10px] bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded font-bold">
-                              {opt.badge}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-400 block mt-0.5 leading-tight">
-                          {opt.subtitle}
-                        </span>
-                      </div>
-                    </div>
+            <div className="p-5 rounded-2xl bg-teal-950/20 border border-teal-600/40 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <PayChanguLogo className="h-7" />
+                  <span className="text-xs font-bold text-teal-300 bg-teal-900/60 border border-teal-700/60 px-2 py-0.5 rounded-full">
+                    Official Master Gateway
+                  </span>
+                </div>
+                <div className="w-5 h-5 rounded-full border border-teal-400 bg-teal-600 text-white flex items-center justify-center">
+                  <Check className="w-3 h-3" />
+                </div>
+              </div>
 
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-1 shrink-0 ${
-                      isSelected ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-700'
-                    }`}>
-                      {isSelected && <Check className="w-2.5 h-2.5" />}
-                    </div>
-                  </button>
-                );
-              })}
+              <p className="text-xs text-slate-300 leading-relaxed">
+                PayChangu securely processes payments across all major Malawian mobile money wallets and credit/debit cards:
+              </p>
+
+              {/* Supported Payment Channels */}
+              <div className="pt-1">
+                <PaymentMethodsBanner className="w-full max-w-sm" />
+              </div>
             </div>
           </div>
 
@@ -269,13 +219,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <ShieldCheck className="w-5 h-5" />
               <span>
                 {isLoading
-                  ? 'Initiating Secure PayChangu Payment...'
-                  : `PAY MK ${song.priceMWK.toLocaleString()} & GET DOWNLOAD`}
+                  ? 'Connecting to PayChangu...'
+                  : `CONTINUE WITH PAYCHANGU (MK ${song.priceMWK.toLocaleString()})`}
               </span>
             </button>
 
             <p className="text-center text-[11px] text-slate-400">
-              🔒 Verified by PayChangu. Payment confirmation happens server-side. Download starts instantly upon verification.
+              🔒 Real-time payment verification. No simulation. Instant audio download starts immediately upon provider authorization.
             </p>
           </div>
         </form>

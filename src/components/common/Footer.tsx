@@ -1,6 +1,7 @@
 import React from 'react';
 import { Disc, Shield, ArrowUpRight } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
+import { PayChanguLogo, PaymentMethodsBanner } from './PaymentLogos';
 
 interface FooterProps {
   onNavigate: (path: string) => void;
@@ -109,25 +110,22 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
           {/* Payment Badges & PWA */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Malawi Secure Payments</h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Instant mobile money & card processing powered by PayChangu gateway.
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-semibold text-rose-400 flex items-center justify-center">
-                Airtel Money
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-semibold text-emerald-400 flex items-center justify-center">
-                TNM Mpamba
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-semibold text-blue-400 flex items-center justify-center">
-                Visa / Cards
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-semibold text-orange-400 flex items-center justify-center">
-                Bank Transfer
-              </div>
+            <div className="flex items-center gap-2">
+              <PayChanguLogo className="h-6" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-teal-400 bg-teal-950/60 border border-teal-800/60 px-1.5 py-0.5 rounded">
+                Master Gateway
+              </span>
             </div>
-            <div className="pt-2">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Official payment provider powering instant mobile money and card transactions in Malawi:
+            </p>
+            
+            {/* Payment Methods Supported */}
+            <div className="pt-1">
+              <PaymentMethodsBanner className="w-full max-w-[280px]" />
+            </div>
+
+            <div className="pt-3">
               <PWAInstallButton variant="button" className="w-full text-xs" />
             </div>
           </div>

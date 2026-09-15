@@ -71,15 +71,18 @@ export const api = {
     return data.order;
   },
 
-  // Payment Verification (Server-Side)
+  // Payment Verification (Real Server-Side PayChangu Gateway)
   async verifyPayment(payload: {
     txRef: string;
     paychanguRef?: string;
-    mockSuccess?: boolean;
   }): Promise<{
+    success: boolean;
     verified: boolean;
+    status: 'PAID' | 'FAILED' | 'CANCELLED' | 'PENDING';
     order: Order;
-    purchaseToken: string;
+    purchaseToken?: string;
+    error?: string;
+    apiKeyRequired?: boolean;
   }> {
     const res = await fetch('/api/payments/verify', {
       method: 'POST',
@@ -87,7 +90,6 @@ export const api = {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Payment verification failed');
     return data;
   },
 

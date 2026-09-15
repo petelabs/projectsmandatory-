@@ -228,62 +228,97 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* ===================================================
           FEATURED RELEASES
           =================================================== */}
-      <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-              Handpicked Masters
-            </span>
-            <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5 font-['Syne',sans-serif]">
-              Featured Releases
-            </h2>
+      {featuredSongs.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                Handpicked Masters
+              </span>
+              <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5 font-['Syne',sans-serif]">
+                Featured Releases
+              </h2>
+            </div>
+            <button
+              onClick={() => onNavigate('/music')}
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
+            >
+              <span>See all {songs.length} tracks</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            onClick={() => onNavigate('/music')}
-            className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
-          >
-            <span>See all {songs.length} tracks</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {featuredSongs.map((song) => (
-            <SongCard
-              key={song.id}
-              song={song}
-              onBuy={onBuy}
-              onSelectSong={onSelectSong}
-            />
-          ))}
-        </div>
-      </section>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {featuredSongs.map((song) => (
+              <SongCard
+                key={song.id}
+                song={song}
+                onBuy={onBuy}
+                onSelectSong={onSelectSong}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Fresh Catalog Blank State if 0 Songs */}
+      {songs.length === 0 && (
+        <section className="rounded-3xl bg-slate-900/60 border border-slate-800/80 p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-600/20 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/30">
+            <Music2 className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-xl font-bold text-white font-['Syne',sans-serif]">
+              Studio Master Catalog Starting Fresh
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-lg mx-auto">
+              New official studio tracks are being prepared for release. Log in to the Artist Portal to upload and publish your first master recording.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => onNavigate('/admin/login')}
+              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition"
+            >
+              Artist Admin: Upload New Track
+            </button>
+            <button
+              onClick={() => onNavigate('/about')}
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition"
+            >
+              About PROJECTS MANDATORY
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* ===================================================
           POPULAR DOWNLOADS
           =================================================== */}
-      <section className="space-y-6">
-        <div>
-          <span className="text-xs font-mono text-orange-400 uppercase tracking-wider font-semibold">
-            Fan Favorites
-          </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5 font-['Syne',sans-serif]">
-            Popular Downloads
-          </h2>
-        </div>
+      {popularSongs.length > 0 && (
+        <section className="space-y-6">
+          <div>
+            <span className="text-xs font-mono text-orange-400 uppercase tracking-wider font-semibold">
+              Fan Favorites
+            </span>
+            <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5 font-['Syne',sans-serif]">
+              Popular Downloads
+            </h2>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {popularSongs.map((song) => (
-            <SongCard
-              key={song.id}
-              song={song}
-              onBuy={onBuy}
-              onSelectSong={onSelectSong}
-              compact
-            />
-          ))}
-        </div>
-      </section>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {popularSongs.map((song) => (
+              <SongCard
+                key={song.id}
+                song={song}
+                onBuy={onBuy}
+                onSelectSong={onSelectSong}
+                compact
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ===================================================
           WHY PROJECTS MANDATORY

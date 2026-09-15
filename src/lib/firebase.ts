@@ -303,19 +303,15 @@ export async function uploadCoverToStorage(
   });
 }
 
-// Initial Database Seeder: Seeds catalog only if database is completely empty
+// Initial Database Seeder: Seeds default artist settings if absent, keeps song catalog clean
 export async function seedInitialDataIfEmpty() {
   try {
-    const songsCol = collection(db, 'songs');
-    const snap = await getDocs(songsCol);
-    if (snap.empty) {
-      console.log('[Firestore] Initializing official discography records...');
-      for (const song of INITIAL_SONGS) {
-        await setDoc(doc(db, 'songs', song.id), song);
-      }
-      await setDoc(doc(db, 'artistSettings', 'current'), INITIAL_ARTIST_SETTINGS);
+    const settingsDoc = doc(db, 'artistSettings', 'current');
+    const snap = await getDoc(settingsDoc);
+    if (!snap.exists()) {
+      await setDoc(settingsDoc, INITIAL_ARTIST_SETTINGS);
     }
   } catch (err) {
-    console.warn('Initial seeding note (will load on server/client):', err);
+    console.warn('Initial seeding note:', err);
   }
 }
