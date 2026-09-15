@@ -20,10 +20,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({
         <div className="relative z-10 max-w-2xl space-y-2">
           <Badge variant="primary">THE ARTIST BEHIND THE SOUND</Badge>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-white font-['Syne',sans-serif]">
-            About PROJECTS MANDATORY
+            About Hapsin
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Pioneering modern Afro-fusion, raw storytelling, and direct listener ownership straight out of Malawi.
+            Pioneering modern Afro-fusion, authentic rhythms, and empowering fellow African artists with direct listener ownership.
           </p>
         </div>
       </div>
@@ -36,7 +36,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
           <div className="rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 shadow-xl">
             <img
               src={artistInfo.profileImage || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop'}
-              alt="PROJECTS MANDATORY Artist"
+              alt="Hapsin Artist Portrait"
               className="w-full h-full object-cover"
             />
           </div>
@@ -57,22 +57,25 @@ export const AboutPage: React.FC<AboutPageProps> = ({
         <div className="md:col-span-7 space-y-6 text-sm text-slate-300 leading-relaxed">
           <div className="space-y-3">
             <h3 className="text-lg font-bold text-white font-['Syne',sans-serif]">
-              The Music & The Philosophy
+              The Music & The Vision
             </h3>
             <p>
-              PROJECTS MANDATORY represents a commitment to pure artistic expression. Instead of relying on algorithmic playlist machines and fractional streaming royalties, this platform was built to re-establish the authentic connection between the music creator and the listener.
+              Hapsin represents a commitment to pure artistic expression and authentic sonic craft. Instead of relying on algorithmic streaming machines and fractional streaming royalties, this platform was built to re-establish the authentic connection between the music creator and the listener.
             </p>
             <p>
-              Every track released under PROJECTS MANDATORY is recorded, mixed, and mastered to studio specifications. When you buy a song here, you receive a full-fidelity master audio file that lives on your phone, flash drive, or audio library without needing recurring subscriptions or continuous internet data.
+              Every track released on Hapsin is recorded, mixed, and mastered to studio specifications. When you buy a song here, you receive a full-fidelity master audio file that lives on your phone, flash drive, or audio library without needing recurring subscriptions or continuous internet data.
+            </p>
+            <p>
+              Furthermore, Hapsin opens its platform to other upcoming and established artists who want to promote and monetize their master recordings directly to an engaged audience across Malawi and Africa.
             </p>
           </div>
 
           <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-rose-400">
-              Why We Rejected Streaming
+              Direct Music Distribution & Artist Promotion
             </h4>
             <p className="text-xs text-slate-300">
-              Streaming services pay fractions of a cent per play while heavily compressing the dynamic range of music. By owning your copy, you support the artist directly while getting the highest-quality listening experience possible.
+              Streaming services pay fractions of a cent per play while compressing audio quality. By owning master copies and buying directly via Airtel Money, TNM Mpamba, or card, listeners genuinely support the creative community.
             </p>
           </div>
 
@@ -81,7 +84,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
               onClick={onExploreMusic}
               className="min-h-[46px] px-6 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-950/40 transition"
             >
-              Explore the Discography
+              Explore the Catalog
             </button>
           </div>
         </div>

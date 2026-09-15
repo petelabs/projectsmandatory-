@@ -1,7 +1,8 @@
 import React from 'react';
-import { Disc, Shield, ArrowUpRight } from 'lucide-react';
+import { Disc, Shield, ArrowUpRight, Sparkles, MessageCircle } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { PayChanguLogo, PaymentMethodsBanner } from './PaymentLogos';
+import { OFFICIAL_WHATSAPP_LINK, OFFICIAL_WHATSAPP_NUMBER } from '../../lib/firebase';
 
 interface FooterProps {
   onNavigate: (path: string) => void;
@@ -26,19 +27,28 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Official single-artist digital music marketplace. Authentic studio master recordings, direct ownership, zero streaming compression.
+              Official digital music storefront & promotion hub Projects Mandatory featuring artist Hapsin. Authentic studio master recordings, direct ownership, and artist promotion across Africa.
             </p>
-            <div className="pt-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+            <div className="pt-1 flex flex-col gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 w-fit">
                 <Shield className="w-3 h-3" />
-                <span>Verified Direct Artist Store</span>
+                <span>Verified Direct Music Platform</span>
               </span>
+              <a
+                href={OFFICIAL_WHATSAPP_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition font-medium"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp: {OFFICIAL_WHATSAPP_NUMBER}</span>
+              </a>
             </div>
           </div>
 
           {/* Quick Links */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Catalog & Releases</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Catalog & Submissions</h4>
             <ul className="space-y-2 text-xs">
               <li>
                 <button
@@ -51,18 +61,19 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/music?filter=latest')}
-                  className="hover:text-white transition"
+                  onClick={() => onNavigate('/promote')}
+                  className="hover:text-amber-300 text-amber-400 font-semibold transition flex items-center gap-1"
                 >
-                  Latest Releases
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Promote Your Music</span>
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/music?filter=popular')}
+                  onClick={() => onNavigate('/music?filter=latest')}
                   className="hover:text-white transition"
                 >
-                  Popular Tracks
+                  Latest Releases
                 </button>
               </li>
               <li>
@@ -78,16 +89,16 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
           {/* Artist & Support */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Artist & Policy</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Projects Mandatory</h4>
             <ul className="space-y-2 text-xs">
               <li>
                 <button onClick={() => onNavigate('/about')} className="hover:text-white transition">
-                  About PROJECTS MANDATORY
+                  About Hapsin
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('/contact')} className="hover:text-white transition">
-                  Contact & Management
+                  Contact on Website / WhatsApp
                 </button>
               </li>
               <li>
@@ -102,7 +113,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button onClick={() => onNavigate('/admin/login')} className="hover:text-blue-400 text-slate-500 transition">
-                  Artist Admin Portal
+                  Admin Portal
                 </button>
               </li>
             </ul>
@@ -120,7 +131,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               Official payment provider powering instant mobile money and card transactions in Malawi:
             </p>
             
-            {/* Payment Methods Supported */}
             <div className="pt-1">
               <PaymentMethodsBanner className="w-full max-w-[280px]" />
             </div>
@@ -133,9 +143,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© 2026 PROJECTS MANDATORY. All rights reserved. Non-streaming digital music store.</p>
+          <p>© 2026 Projects Mandatory. All rights reserved. Featuring artist Hapsin.</p>
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
-            <span>Official Artist Direct Store</span>
+            <span>Official Digital Music Platform</span>
             <span>•</span>
             <span>Lilongwe & Blantyre, Malawi</span>
           </div>
@@ -144,3 +154,4 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
     </footer>
   );
 };
+

@@ -9,18 +9,24 @@ service firebase.storage {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.admin == true ||
+        request.auth.token.email == 'alwaysgoodone265@gmail.com' ||
         request.auth.token.email == 'petedianolabs@gmail.com'
       );
     }
 
-    // Cover Artwork - Publicly readable for marketplace browsing
+    // Cover Artwork - Publicly readable
     match /covers/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
+    // Music Promotion Submissions - uploadable by submitting artists
+    match /submissions/{allPaths=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Private Studio Music Master Files - NEVER directly readable by public clients!
-    // Files are served strictly via the server-side authorized download endpoint (/api/download/:token)
     match /music/private/{allPaths=**} {
       allow read, write: if false;
     }

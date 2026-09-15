@@ -27,6 +27,7 @@ import { ContactPage } from './pages/ContactPage';
 import { AccountPage } from './pages/AccountPage';
 import { MyPurchasesPage } from './pages/MyPurchasesPage';
 import { PrivacyPage, TermsPage } from './pages/LegalPages';
+import { PromoteMusicPage } from './pages/PromoteMusicPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 
@@ -72,7 +73,6 @@ function AppContent() {
           setSongs(realtimeSongs);
           setIsLoading(false);
         } else {
-          // If Firestore is empty or initializing, check server/initial
           api.getSongs().then((apiSongs) => {
             if (apiSongs.length > 0) {
               setSongs(apiSongs);
@@ -155,8 +155,8 @@ function AppContent() {
       return (
         <div className="py-12">
           <ErrorState
-            title="Connection Error"
-            error="Could not connect to the PROJECTS MANDATORY music database. Please check your connection."
+            title="Connection Notice"
+            error="Connecting to Hapsin music catalog. Please ensure you have a network connection."
             onRetry={() => window.location.reload()}
           />
         </div>
@@ -187,6 +187,16 @@ function AppContent() {
         <AdminLoginPage
           onSuccess={() => navigate('/admin/dashboard')}
           onBack={() => navigate('/')}
+        />
+      );
+    }
+
+    // Promote Music / Artist Submissions Route
+    if (currentPath === '/promote') {
+      return (
+        <PromoteMusicPage
+          onBack={() => navigate('/')}
+          onExploreMusic={() => navigate('/music')}
         />
       );
     }

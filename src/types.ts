@@ -115,3 +115,43 @@ export interface DownloadTokenPayload {
   expiresAt: string;
   remainingDownloads: number;
 }
+
+export interface MusicPromotionRequest {
+  id: string;
+  artistName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  songTitle: string;
+  featuredArtists?: string;
+  genre: string;
+  proposedPriceMWK?: number;
+  audioFilePath?: string;
+  audioFileName?: string;
+  coverImage?: string;
+  streamUrl?: string;
+  description?: string;
+  lyrics?: string;
+  socialLinks?: {
+    instagram?: string;
+    tiktok?: string;
+    youtube?: string;
+    facebook?: string;
+  };
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  adminNotes?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  phoneOrWhatsApp: string;
+  subject?: string;
+  message: string;
+  createdAt: string;
+  read?: boolean;
+  status?: 'NEW' | 'READ' | 'ARCHIVED';
+}
+
