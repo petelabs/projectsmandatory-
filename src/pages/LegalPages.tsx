@@ -90,6 +90,11 @@ export const TermsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <p>
             Each purchase token provides up to 5 download attempts for a duration of 30 days. If you lose your files or encounter network issues, you may look up your order with your checkout email or reach out to support.
           </p>
+
+          <h2 className="text-base font-bold text-white">5. Platform Ownership & Legal Notice</h2>
+          <p>
+            Projects Mandatory is an independent digital audio storefront and music distribution platform owned and operated by Hapsin as Project Owner. All legal claims, platform trademarks, and copyright administration are held under applicable laws of the Republic of Malawi.
+          </p>
         </div>
       </div>
     </div>

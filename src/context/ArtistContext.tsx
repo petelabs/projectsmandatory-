@@ -5,6 +5,8 @@ import {
   ArtistSongSubmission,
   ArtistSupportTip,
   ArtistPayoutRecord,
+  BoostReferral,
+  ArtistVerificationDetails,
 } from '../types';
 import {
   saveArtistProfileToFirestore,
@@ -15,6 +17,10 @@ import {
   subscribeArtistPayouts,
   uploadAudioToStorage,
   uploadCoverToStorage,
+  requestArtistVerification,
+  markArtistNotificationRead,
+  publishSongDirectly,
+  subscribeArtistBoostReferrals,
 } from '../lib/firebase';
 import { useToast } from './ToastContext';
 
@@ -25,6 +31,7 @@ interface ArtistContextType {
   submissions: ArtistSongSubmission[];
   tips: ArtistSupportTip[];
   payouts: ArtistPayoutRecord[];
+  boostReferrals: BoostReferral[];
   registerArtistProfile: (data: {
     artistName: string;
     phone: string;
@@ -41,6 +48,9 @@ interface ArtistContextType {
     };
   }) => Promise<void>;
   updateArtistProfile: (updates: Partial<ArtistProfile>) => Promise<void>;
+  requestVerification: (details: ArtistVerificationDetails) => Promise<void>;
+  markNotificationAsRead: (notifId: string) => Promise<void>;
+  createSongBoostLink: (songId?: string) => string;
   submitSongUpload: (data: {
     title: string;
     featuredArtists?: string;
@@ -54,6 +64,7 @@ interface ArtistContextType {
     audioFileName?: string;
     coverFile?: File;
     coverUrl?: string;
+    publishDirectly?: boolean;
     onProgress?: (step: string, percent: number) => void;
   }) => Promise<string>;
 }
@@ -67,6 +78,7 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [submissions, setSubmissions] = useState<ArtistSongSubmission[]>([]);
   const [tips, setTips] = useState<ArtistSupportTip[]>([]);
   const [payouts, setPayouts] = useState<ArtistPayoutRecord[]>([]);
+  const [boostReferrals, setBoostReferrals] = useState<BoostReferral[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Subscribe to artist profile when user is authenticated
@@ -76,6 +88,7 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setSubmissions([]);
       setTips([]);
       setPayouts([]);
+      setBoostReferrals([]);
       setIsLoading(false);
       return;
     }
@@ -104,13 +117,18 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setPayouts(artistPayouts);
     });
 
+    const unsubscribeBoost = subscribeArtistBoostReferrals(currentUid, (referrals) => {
+      setBoostReferrals(referrals);
+    });
+
     return () => {
       unsubscribeProfile();
       unsubscribeSubmissions();
       unsubscribeTips();
       unsubscribePayouts();
+      unsubscribeBoost();
     };
-  }, [user, firebaseUser]);
+  }, [user?.id, firebaseUser?.uid]);
 
   const registerArtistProfile = async (data: {
     artistName: string;
@@ -127,23 +145,27 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       bankName?: string;
     };
   }) => {
-    const uid = firebaseUser?.uid || user?.id;
-    const email = firebaseUser?.email || user?.email;
-    if (!uid || !email) {
-      throw new Error('Please sign in with Google or Email first to create your artist account.');
+    const currentUid = firebaseUser?.uid || user?.id;
+    if (!currentUid) {
+      throw new Error('You must be signed in with Google or an account to register an artist profile.');
     }
 
     const newProfile: ArtistProfile = {
-      id: uid,
-      userId: uid,
+      id: currentUid,
+      userId: currentUid,
       artistName: data.artistName.trim(),
-      email: email.trim().toLowerCase(),
+      email: firebaseUser?.email || user?.email || '',
       phone: data.phone.trim(),
       whatsapp: data.whatsapp?.trim() || data.phone.trim(),
-      bio: data.bio.trim(),
-      genres: data.genres.length > 0 ? data.genres : ['Afro-pop', 'Urban'],
-      avatarUrl: data.avatarUrl || user?.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop',
-      bannerUrl: data.bannerUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1600&auto=format&fit=crop',
+      bio: data.bio.trim() || 'Independent artist on Projects Mandatory.',
+      genres: data.genres,
+      avatarUrl:
+        data.avatarUrl ||
+        user?.avatarUrl ||
+        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop',
+      bannerUrl:
+        data.bannerUrl ||
+        'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1200&auto=format&fit=crop',
       payoutDetails: data.payoutDetails,
       wallet: {
         totalEarnedMWK: 0,
@@ -153,7 +175,18 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         totalTipsReceivedMWK: 0,
         totalSupportersCount: 0,
       },
-      isVerified: true,
+      isVerified: false,
+      verificationStatus: 'UNVERIFIED',
+      referralStats: {
+        totalReferralClicks: 0,
+        totalReferralPlays: 0,
+        totalReferralPurchases: 0,
+        totalReferralRevenueMWK: 0,
+      },
+      analytics: {
+        totalPlays: 0,
+        totalPageViews: 0,
+      },
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -176,6 +209,45 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     showToast('Artist profile updated successfully.', 'success');
   };
 
+  const requestVerification = async (details: ArtistVerificationDetails) => {
+    if (!artistProfile) throw new Error('No artist profile found.');
+    await requestArtistVerification(artistProfile.id, details);
+    setArtistProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            verificationStatus: 'PENDING_VERIFICATION',
+            verificationRequestedAt: new Date().toISOString(),
+            verificationDetails: details,
+          }
+        : null
+    );
+    showToast('Verification request submitted to Admin Dashboard for review!', 'success');
+  };
+
+  const markNotificationAsRead = async (notifId: string) => {
+    if (!artistProfile) return;
+    await markArtistNotificationRead(artistProfile.id, notifId);
+    setArtistProfile((prev) => {
+      if (!prev || !prev.notifications) return prev;
+      return {
+        ...prev,
+        notifications: prev.notifications.map((n) =>
+          n.id === notifId ? { ...n, read: true } : n
+        ),
+      };
+    });
+  };
+
+  const createSongBoostLink = (songId?: string) => {
+    const origin = window.location.origin;
+    const artistId = artistProfile?.id || '';
+    if (songId) {
+      return `${origin}/song/${songId}?ref=${artistId}&boost=1`;
+    }
+    return `${origin}/?artist=${artistId}&ref=${artistId}&boost=1`;
+  };
+
   const submitSongUpload = async (data: {
     title: string;
     featuredArtists?: string;
@@ -189,19 +261,22 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     audioFileName?: string;
     coverFile?: File;
     coverUrl?: string;
+    publishDirectly?: boolean;
     onProgress?: (step: string, percent: number) => void;
   }): Promise<string> => {
     if (!artistProfile) {
-      throw new Error('You must have an active artist account to request track uploads.');
+      throw new Error('You must have an active artist account to upload tracks.');
     }
 
     // Hard price limit validation: capped at K5,000 max
     const boundedPrice = Math.min(Math.max(0, Number(data.priceMWK) || 0), 5000);
+    const artistShareMWK = Math.round(boundedPrice * 0.7);
+    const platformShareMWK = boundedPrice - artistShareMWK;
 
     let finalAudioUrl = data.audioUrl || '';
     let finalAudioFileName = data.audioFileName || `${data.title}.mp3`;
-    let finalFileSize = 'Studio Master';
-    let finalFileFormat = '320kbps MP3 Master';
+    let finalFileSize = '10.2 MB';
+    let finalFileFormat = '320kbps MP3 + WAV Master';
 
     // 1. Upload audio if file present
     if (data.audioFile) {
@@ -216,7 +291,10 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     // 2. Upload cover if file present
-    let finalCoverUrl = data.coverUrl || artistProfile.avatarUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop';
+    let finalCoverUrl =
+      data.coverUrl ||
+      artistProfile.avatarUrl ||
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop';
     if (data.coverFile) {
       data.onProgress?.('Uploading Cover Artwork...', 60);
       const coverResult = await uploadCoverToStorage(data.coverFile, (percent) => {
@@ -225,7 +303,39 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       finalCoverUrl = coverResult.downloadUrl;
     }
 
-    data.onProgress?.('Submitting track for administrator approval...', 95);
+    // 3. Direct publishing for verified artists
+    const canPublishDirectly = artistProfile.isVerified === true || data.publishDirectly;
+
+    if (canPublishDirectly) {
+      data.onProgress?.('Publishing directly to Projects Mandatory live store...', 90);
+      const publishedSongId = await publishSongDirectly({
+        artistId: artistProfile.id,
+        artistName: artistProfile.artistName,
+        artistEmail: artistProfile.email,
+        artistPhone: artistProfile.phone,
+        title: data.title.trim(),
+        featuredArtists: data.featuredArtists?.trim() || '',
+        genre: data.genre.trim() || 'Afro-fusion',
+        releaseDate: data.releaseDate || new Date().toISOString().split('T')[0],
+        priceMWK: boundedPrice,
+        artistShareMWK,
+        platformShareMWK,
+        coverImage: finalCoverUrl,
+        audioFilePath: finalAudioUrl,
+        audioFileName: finalAudioFileName,
+        fileSize: finalFileSize,
+        fileFormat: finalFileFormat,
+        streamUrl: finalAudioUrl,
+        description: data.description.trim() || `Studio single by ${artistProfile.artistName}`,
+        lyrics: data.lyrics?.trim() || '',
+      });
+      data.onProgress?.('Track published live to store!', 100);
+      showToast(`🎉 "${data.title}" is published live! Direct verified posting complete.`, 'success');
+      return publishedSongId;
+    }
+
+    // Otherwise, submit to Admin review queue
+    data.onProgress?.('Submitting track for administrator verification...', 95);
 
     const submissionId = await submitArtistSongSubmission({
       artistId: artistProfile.id,
@@ -261,8 +371,12 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         submissions,
         tips,
         payouts,
+        boostReferrals,
         registerArtistProfile,
         updateArtistProfile,
+        requestVerification,
+        markNotificationAsRead,
+        createSongBoostLink,
         submitSongUpload,
       }}
     >

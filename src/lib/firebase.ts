@@ -23,6 +23,7 @@ import {
   getDocFromServer,
   Unsubscribe,
   increment,
+  arrayUnion,
 } from 'firebase/firestore';
 import {
   getStorage,
@@ -42,6 +43,9 @@ import {
   ArtistSongSubmission,
   ArtistSupportTip,
   ArtistPayoutRecord,
+  BoostReferral,
+  ArtistNotification,
+  ArtistVerificationDetails,
 } from '../types';
 import { INITIAL_ARTIST_SETTINGS } from '../data/initialData';
 
@@ -532,6 +536,283 @@ export function subscribeAllPayouts(
     list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     callback(list);
   });
+}
+
+// ==========================================
+// ARTIST VERIFICATION & NOTIFICATIONS
+// ==========================================
+
+export async function requestArtistVerification(
+  artistId: string,
+  details: ArtistVerificationDetails
+): Promise<void> {
+  const artistRef = doc(db, 'artists', artistId);
+  await updateDoc(artistRef, {
+    verificationStatus: 'PENDING_VERIFICATION',
+    verificationRequestedAt: new Date().toISOString(),
+    verificationDetails: details,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function approveArtistVerification(
+  artistId: string
+): Promise<void> {
+  const artistRef = doc(db, 'artists', artistId);
+  const now = new Date().toISOString();
+  const notification: ArtistNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title: 'Profile Officially Verified 🎉',
+    message: 'Congratulations! Your artist profile has been verified. You can now post studio songs directly to the live store without waiting for admin review, generate Share & Boost referral links, and view your real-time analytics!',
+    type: 'VERIFICATION_APPROVED',
+    read: false,
+    createdAt: now,
+  };
+
+  await updateDoc(artistRef, {
+    isVerified: true,
+    verificationStatus: 'VERIFIED',
+    verifiedAt: now,
+    updatedAt: now,
+    notifications: arrayUnion(notification),
+  });
+}
+
+export async function rejectArtistVerification(
+  artistId: string,
+  feedback: string
+): Promise<void> {
+  const artistRef = doc(db, 'artists', artistId);
+  const now = new Date().toISOString();
+  const notification: ArtistNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title: 'Verification Request Update',
+    message: feedback ? `Verification review notes: ${feedback}` : 'Your verification request could not be completed. Please review your details and re-apply.',
+    type: 'VERIFICATION_REJECTED',
+    read: false,
+    createdAt: now,
+  };
+
+  await updateDoc(artistRef, {
+    isVerified: false,
+    verificationStatus: 'REJECTED',
+    verificationFeedback: feedback,
+    updatedAt: now,
+    notifications: arrayUnion(notification),
+  });
+}
+
+export async function markArtistNotificationRead(
+  artistId: string,
+  notificationId: string
+): Promise<void> {
+  const artistRef = doc(db, 'artists', artistId);
+  const snap = await getDoc(artistRef);
+  if (snap.exists()) {
+    const data = snap.data() as ArtistProfile;
+    const currentNotifs = data.notifications || [];
+    const updated = currentNotifs.map((n) =>
+      n.id === notificationId ? { ...n, read: true } : n
+    );
+    await updateDoc(artistRef, { notifications: updated });
+  }
+}
+
+// ==========================================
+// DIRECT SONG PUBLISHING (Verified Privilege)
+// ==========================================
+
+export async function publishSongDirectly(
+  submissionData: Omit<ArtistSongSubmission, 'id' | 'createdAt' | 'status' | 'reviewedAt'> & {
+    artistId: string;
+    artistName: string;
+  }
+): Promise<string> {
+  const songId = `song-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+
+  // 1. Create live song in catalog
+  const songDoc = doc(db, 'songs', songId);
+  const songPayload: Song = {
+    id: songId,
+    title: submissionData.title,
+    artist: submissionData.artistName,
+    artistId: submissionData.artistId,
+    featuredArtists: submissionData.featuredArtists || '',
+    producer: submissionData.producer || 'Projects Mandatory Studio',
+    genre: submissionData.genre || 'Afro-fusion',
+    releaseDate: submissionData.releaseDate || now.split('T')[0],
+    priceMWK: submissionData.priceMWK,
+    artistShareMWK: submissionData.artistShareMWK,
+    platformShareMWK: submissionData.platformShareMWK,
+    coverImage: submissionData.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
+    description: submissionData.description || `Official single by ${submissionData.artistName}`,
+    lyrics: submissionData.lyrics || '',
+    audioFilePath: submissionData.audioFilePath,
+    audioFileName: submissionData.audioFileName,
+    fileFormat: submissionData.fileFormat || '320kbps MP3 + WAV Master',
+    fileSize: submissionData.fileSize || '10.2 MB',
+    isPublished: true,
+    isLatest: true,
+    downloadCount: 0,
+    boostClicks: 0,
+    boostPurchases: 0,
+    createdAt: now,
+  };
+  await setDoc(songDoc, songPayload);
+
+  // 2. Also record in artistSubmissions as APPROVED
+  const submissionDoc = doc(db, 'artistSubmissions', songId);
+  const subPayload: ArtistSongSubmission = {
+    ...submissionData,
+    id: songId,
+    status: 'APPROVED',
+    publishedSongId: songId,
+    createdAt: now,
+    reviewedAt: now,
+  };
+  await setDoc(submissionDoc, subPayload);
+
+  // 3. Send celebratory in-app notification to artist
+  const artistRef = doc(db, 'artists', submissionData.artistId);
+  const notification: ArtistNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title: 'Song Published Live 🚀',
+    message: `"${submissionData.title}" was published directly to the Projects Mandatory store! You can now generate your Share & Boost referral link and start inviting fans.`,
+    type: 'SONG_APPROVED',
+    read: false,
+    createdAt: now,
+  };
+  await updateDoc(artistRef, {
+    notifications: arrayUnion(notification),
+    updatedAt: now,
+  });
+
+  return songId;
+}
+
+// ==========================================
+// SHARE & BOOST REFERRAL ENGINE
+// ==========================================
+
+export async function recordBoostVisit(params: {
+  artistId: string;
+  artistName?: string;
+  songId?: string;
+  songTitle?: string;
+  code: string;
+  source?: string;
+}): Promise<string> {
+  const referralId = `boost-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const referralDoc = doc(db, 'boostReferrals', referralId);
+  const now = new Date().toISOString();
+
+  const payload: BoostReferral = {
+    id: referralId,
+    artistId: params.artistId,
+    artistName: params.artistName || 'Artist',
+    songId: params.songId,
+    songTitle: params.songTitle,
+    code: params.code,
+    source: params.source || 'direct',
+    convertedToPurchase: false,
+    createdAt: now,
+  };
+
+  await setDoc(referralDoc, payload);
+
+  // Increment clicks in artist profile
+  try {
+    const artistRef = doc(db, 'artists', params.artistId);
+    await updateDoc(artistRef, {
+      'referralStats.totalReferralClicks': increment(1),
+      updatedAt: now,
+    });
+  } catch (err) {
+    console.warn('Could not update artist boost stats:', err);
+  }
+
+  // Increment clicks on song if attached
+  if (params.songId) {
+    try {
+      const songRef = doc(db, 'songs', params.songId);
+      await updateDoc(songRef, {
+        boostClicks: increment(1),
+      });
+    } catch (err) {
+      console.warn('Could not update song boost clicks:', err);
+    }
+  }
+
+  return referralId;
+}
+
+export async function recordBoostPurchase(params: {
+  artistId: string;
+  songId?: string;
+  amountMWK: number;
+  referralId?: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+
+  // If referralId known, update doc
+  if (params.referralId) {
+    try {
+      const referralDoc = doc(db, 'boostReferrals', params.referralId);
+      await updateDoc(referralDoc, {
+        convertedToPurchase: true,
+        amountMWK: params.amountMWK,
+      });
+    } catch (err) {
+      console.warn('Could not update boost referral conversion:', err);
+    }
+  }
+
+  // Update artist stats
+  try {
+    const artistRef = doc(db, 'artists', params.artistId);
+    await updateDoc(artistRef, {
+      'referralStats.totalReferralPurchases': increment(1),
+      'referralStats.totalReferralRevenueMWK': increment(params.amountMWK),
+      updatedAt: now,
+    });
+  } catch (err) {
+    console.warn('Could not update artist boost purchase stats:', err);
+  }
+
+  // Update song stats
+  if (params.songId) {
+    try {
+      const songRef = doc(db, 'songs', params.songId);
+      await updateDoc(songRef, {
+        boostPurchases: increment(1),
+      });
+    } catch (err) {
+      console.warn('Could not update song boost purchases:', err);
+    }
+  }
+}
+
+export function subscribeArtistBoostReferrals(
+  artistId: string,
+  callback: (referrals: BoostReferral[]) => void
+): Unsubscribe {
+  const boostCol = collection(db, 'boostReferrals');
+  const q = query(boostCol, where('artistId', '==', artistId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: BoostReferral[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as BoostReferral), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Boost referrals subscription note:', err.message);
+    }
+  );
 }
 
 // ==========================================

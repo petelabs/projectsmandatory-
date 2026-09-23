@@ -1,7 +1,8 @@
 import React from 'react';
-import { Download, Sparkles, Disc3, ShieldCheck } from 'lucide-react';
+import { Download, Sparkles, Disc3, Play, Pause } from 'lucide-react';
 import { Song } from '../../types';
 import { Badge } from '../common/Badge';
+import { usePlayback } from '../../context/PlaybackContext';
 
 interface SongCardProps {
   song: Song;
@@ -16,12 +17,25 @@ export const SongCard: React.FC<SongCardProps> = ({
   onSelectSong,
   compact = false,
 }) => {
+  const { currentSong, isPlaying, playSong, togglePlay } = usePlayback();
+  const isCurrent = currentSong?.id === song.id;
+  const isThisPlaying = isCurrent && isPlaying;
+
+  const handlePlayToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isCurrent) {
+      togglePlay();
+    } else {
+      playSong(song);
+    }
+  };
+
   return (
     <div className="group relative flex flex-col justify-between rounded-2xl bg-slate-900/70 border border-slate-800/80 hover:border-slate-700 p-4 transition-all duration-200 hover:shadow-xl hover:shadow-black/40 overflow-hidden text-left">
       
       {/* Top Artwork & Metadata */}
       <div>
-        {/* Cover Artwork (NO Play Button, pure visual) */}
+        {/* Cover Artwork with Hover Play Button */}
         <div
           onClick={() => onSelectSong(song.id)}
           className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-800 cursor-pointer mb-3.5 group/cover"
@@ -42,6 +56,23 @@ export const SongCard: React.FC<SongCardProps> = ({
             loading="lazy"
             referrerPolicy="no-referrer"
           />
+
+          {/* Quick Play/Stream Overlay Button */}
+          <button
+            onClick={handlePlayToggle}
+            aria-label={isThisPlaying ? `Pause ${song.title}` : `Play stream of ${song.title}`}
+            className={`absolute inset-0 m-auto w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-xl z-20 ${
+              isThisPlaying
+                ? 'bg-rose-600 text-white scale-100'
+                : 'bg-black/70 hover:bg-rose-600 text-white opacity-0 group-hover/cover:opacity-100 hover:scale-110'
+            }`}
+          >
+            {isThisPlaying ? (
+              <Pause className="w-5 h-5 fill-current" />
+            ) : (
+              <Play className="w-5 h-5 fill-current ml-0.5" />
+            )}
+          </button>
 
           {/* Badges Overlay */}
           <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5 z-10 pointer-events-none">
@@ -64,6 +95,7 @@ export const SongCard: React.FC<SongCardProps> = ({
             <span>HQ 320k</span>
           </div>
         </div>
+
 
         {/* Title, Artist, Genre */}
         <div className="space-y-1">

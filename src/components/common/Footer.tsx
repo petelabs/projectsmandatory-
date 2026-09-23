@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Shield, ArrowUpRight, Sparkles, MessageCircle } from 'lucide-react';
+import { Disc, Shield, ArrowUpRight, Sparkles, MessageCircle, Mic2, Users } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { PayChanguLogo, PaymentMethodsBanner } from './PaymentLogos';
 import { OFFICIAL_WHATSAPP_LINK, OFFICIAL_WHATSAPP_NUMBER } from '../../lib/firebase';
@@ -27,7 +27,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Official digital music storefront & promotion hub Projects Mandatory featuring artist Hapsin. Authentic studio master recordings, direct ownership, and artist promotion across Africa.
+              Malawi's premier digital music marketplace and artist empowerment network. Stream previews, buy authentic uncompressed master audio, and empower local talent with 70% direct payouts.
             </p>
             <div className="pt-1 flex flex-col gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 w-fit">
@@ -61,19 +61,20 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/promote')}
-                  className="hover:text-amber-300 text-amber-400 font-semibold transition flex items-center gap-1"
+                  onClick={() => onNavigate('/artists')}
+                  className="hover:text-white transition flex items-center gap-1"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Promote Your Music</span>
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Discover Artists</span>
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('/music?filter=latest')}
-                  className="hover:text-white transition"
+                  onClick={() => onNavigate('/artist/studio')}
+                  className="hover:text-amber-300 text-amber-400 font-semibold transition flex items-center gap-1"
                 >
-                  Latest Releases
+                  <Mic2 className="w-3.5 h-3.5" />
+                  <span>Artist Studio & Uploads</span>
                 </button>
               </li>
               <li>
@@ -87,18 +88,18 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             </ul>
           </div>
 
-          {/* Artist & Support */}
+          {/* Platform & Legal */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">Projects Mandatory</h4>
             <ul className="space-y-2 text-xs">
               <li>
                 <button onClick={() => onNavigate('/about')} className="hover:text-white transition">
-                  About Hapsin
+                  About Platform
                 </button>
               </li>
               <li>
                 <button onClick={() => onNavigate('/contact')} className="hover:text-white transition">
-                  Contact on Website / WhatsApp
+                  Contact Support
                 </button>
               </li>
               <li>
@@ -143,7 +144,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© 2026 Projects Mandatory. All rights reserved. Featuring artist Hapsin.</p>
+          <p>© 2026 Projects Mandatory. All rights reserved. Platform ownership by Hapsin.</p>
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
             <span>Official Digital Music Platform</span>
             <span>•</span>
@@ -154,4 +155,3 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
     </footer>
   );
 };
-

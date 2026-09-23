@@ -183,7 +183,7 @@ export const PromoteMusicPage: React.FC<PromoteMusicPageProps> = ({ onBack, onEx
             Thank You, {artistName}!
           </h1>
           <p className="text-sm text-slate-300 max-w-lg mx-auto">
-            Your track <strong className="text-white">"{songTitle}"</strong> has been submitted to the Hapsin music promotion team.
+            Your track <strong className="text-white">"{songTitle}"</strong> has been submitted to the Projects Mandatory music promotion team.
           </p>
         </div>
 
@@ -198,7 +198,7 @@ export const PromoteMusicPage: React.FC<PromoteMusicPageProps> = ({ onBack, onEx
           <div className="text-xs text-slate-300 space-y-2 leading-relaxed">
             <p className="font-semibold text-white">What happens next?</p>
             <ol className="list-decimal pl-5 space-y-1 text-slate-400">
-              <li>Hapsin management will review your audio and artwork quality.</li>
+              <li>Projects Mandatory management will review your audio and artwork quality.</li>
               <li>Once accepted, your track will be published on the store catalog with instant PayChangu Malawi mobile money checkout.</li>
               <li>You will be contacted via WhatsApp ({whatsapp || phone}) or email ({email}).</li>
             </ol>
@@ -244,7 +244,7 @@ export const PromoteMusicPage: React.FC<PromoteMusicPageProps> = ({ onBack, onEx
             <span>Artist Promotion Portal</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-['Syne',sans-serif]">
-            Promote Your Music on <span className="text-rose-500">Hapsin</span>
+            Promote Your Music on <span className="text-rose-500">Projects Mandatory</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
             Get your original music discovered, streamed, and sold directly to thousands of music fans in Malawi and across Africa with instant mobile money (Airtel & TNM) and card payments.
@@ -262,7 +262,7 @@ export const PromoteMusicPage: React.FC<PromoteMusicPageProps> = ({ onBack, onEx
             </div>
             <div>
               <h2 className="text-base font-bold text-white">1. Artist & Contact Info</h2>
-              <p className="text-xs text-slate-400">How Hapsin management can reach you</p>
+              <p className="text-xs text-slate-400">How our curation team can reach you</p>
             </div>
           </div>
 
@@ -480,7 +480,7 @@ export const PromoteMusicPage: React.FC<PromoteMusicPageProps> = ({ onBack, onEx
             </div>
             <div>
               <h2 className="text-base font-bold text-white">4. Artist Social Handles (Optional)</h2>
-              <p className="text-xs text-slate-400">For cross-promotion on Hapsin social pages</p>
+              <p className="text-xs text-slate-400">For cross-promotion on Projects Mandatory social pages</p>
             </div>
           </div>
 

@@ -1,357 +1,431 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Disc,
-  Heart,
-  Share2,
+  ArrowLeft,
+  MoreVertical,
+  ShieldCheck,
   Play,
   Pause,
-  ArrowLeft,
-  Sparkles,
-  ShoppingBag,
+  DollarSign,
+  Heart,
+  Share2,
   ExternalLink,
-  MessageCircle,
-  Copy,
-  CheckCircle2,
+  Users,
+  Crown,
+  ShoppingBag,
+  Ticket,
+  Sparkles,
 } from 'lucide-react';
-import { Song, ArtistProfile, ArtistSupportTip } from '../../types';
-import {
-  getArtistProfileFromFirestore,
-  subscribeArtistTips,
-} from '../../lib/firebase';
-import { SupportArtistModal } from '../../components/artist/SupportArtistModal';
+import { Song, ArtistProfile, MerchProduct, EventRecord } from '../../types';
+import { usePlayback } from '../../context/PlaybackContext';
+import { useTheme } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
+import { ArtistTipModal } from '../../components/monetization/ArtistTipModal';
+import { ArtistFanMembershipModal } from '../../components/monetization/ArtistFanMembershipModal';
+import { api } from '../../lib/api';
 
 interface ArtistProfilePageProps {
   artistId: string;
   songs: Song[];
-  onBack: () => void;
-  onBuy: (song: Song) => void;
   onSelectSong: (songId: string) => void;
+  onNavigate: (path: string) => void;
 }
 
 export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
   artistId,
   songs,
-  onBack,
-  onBuy,
-  onSelectSong,
+  onNavigate,
 }) => {
+  const { user } = useAuth();
+  const { currentSong, isPlaying, playSong } = usePlayback();
+  const { isDark } = useTheme();
   const { showToast } = useToast();
-  const [artist, setArtist] = useState<ArtistProfile | null>(null);
-  const [tips, setTips] = useState<ArtistSupportTip[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSupportModalOpen, setIsSupportModalOpen] = useState<boolean>(false);
-  const [playingSongId, setPlayingSongId] = useState<string | null>(null);
-  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
-  // Fetch artist profile
-  useEffect(() => {
-    setIsLoading(true);
-    getArtistProfileFromFirestore(artistId)
-      .then((data) => {
-        if (data) {
-          setArtist(data);
-        } else {
-          // Fallback if Hapsin or not in DB yet
-          setArtist({
-            id: artistId,
-            userId: artistId,
-            artistName: 'Hapsin',
-            email: 'hapsin@projectsmandatory.com',
-            phone: '0984 67 96 91',
-            bio: 'Featured recording artist and music visionary on Projects Mandatory. Stream, purchase studio master tracks, and support creative expression.',
-            genres: ['Afro-fusion', 'Urban Pop'],
-            avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop',
-            bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1600&auto=format&fit=crop',
-            payoutDetails: {
-              accountType: 'AIRTEL_MONEY',
-              accountNumber: '0984 67 96 91',
-              accountName: 'Hapsin Music',
-            },
-            wallet: {
-              totalEarnedMWK: 0,
-              pendingPayoutMWK: 0,
-              totalPaidOutMWK: 0,
-              totalSongSalesCount: 0,
-              totalTipsReceivedMWK: 0,
-              totalSupportersCount: 0,
-            },
-            isVerified: true,
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-          });
-        }
-        setIsLoading(false);
-      })
-      .catch(() => setIsLoading(false));
+  const [activeTab, setActiveTab] = useState<'popular' | 'releases' | 'merch' | 'events' | 'about'>('popular');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [merchItems, setMerchItems] = useState<MerchProduct[]>([]);
+  const [eventsList, setEventsList] = useState<EventRecord[]>([]);
 
-    const unsubscribeTips = subscribeArtistTips(artistId, (artistTips) => {
-      setTips(artistTips);
-    });
+  // Find artist details or default to Bwalya Musik from mockup
+  const artistName = artistId.includes('kizzo')
+    ? 'Kizzo'
+    : artistId.includes('lulu')
+    ? 'Lulu'
+    : artistId.includes('amani')
+    ? 'Amani'
+    : artistId.includes('bflow')
+    ? 'B Flow'
+    : 'Bwalya Musik';
 
-    return () => {
-      unsubscribeTips();
-      if (audioElement) {
-        audioElement.pause();
-      }
-    };
-  }, [artistId]);
-
-  // Audio preview handler
-  const handleTogglePlay = (song: Song) => {
-    if (!song.audioFilePath) {
-      showToast('Master audio not linked for this track yet', 'info');
-      return;
-    }
-
-    if (playingSongId === song.id) {
-      if (audioElement) audioElement.pause();
-      setPlayingSongId(null);
-    } else {
-      if (audioElement) audioElement.pause();
-      const audio = new Audio(song.audioFilePath);
-      audio.play();
-      audio.onended = () => setPlayingSongId(null);
-      setAudioElement(audio);
-      setPlayingSongId(song.id);
-    }
-  };
-
-  const handleShareWhatsApp = () => {
-    const text = `Check out ${artist?.artistName || 'this artist'} on Projects Mandatory! Stream, download master recordings, and support their music here: ${window.location.href}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    showToast('Artist profile link copied to clipboard!', 'success');
-  };
-
-  // Filter songs belonging to this artist
   const artistSongs = songs.filter(
-    (s) => (s.artistId === artistId) || (s.artist.toLowerCase().includes(artist?.artistName.toLowerCase() || ''))
+    (s) => s.artist.toLowerCase().includes(artistName.toLowerCase()) || s.artistId === artistId
   );
 
-  if (isLoading && !artist) {
-    return (
-      <div className="py-16 text-center space-y-4">
-        <div className="w-12 h-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs text-slate-400">Loading Artist Profile...</p>
-      </div>
-    );
-  }
+  const displaySongs = artistSongs.length > 0 ? artistSongs : songs.slice(0, 5);
 
-  if (!artist) {
-    return (
-      <div className="py-16 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-white">Artist Not Found</h2>
-        <button onClick={onBack} className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold">
-          Return to Storefront
-        </button>
-      </div>
-    );
-  }
+  const artistAvatar =
+    displaySongs[0]?.coverImage ||
+    'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop';
+
+  useEffect(() => {
+    // Load merch and events
+    api.getArtistMerch(artistId).then((res) => {
+      if (res.success) setMerchItems(res.products || []);
+    });
+    api.getArtistEvents(artistId).then((res) => {
+      if (res.success) setEventsList(res.events || []);
+    });
+  }, [artistId]);
 
   return (
-    <div className="space-y-8 text-left animate-in fade-in pb-16">
-      
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white py-1 transition"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Return to Music Store</span>
-      </button>
+    <div className="space-y-6 pb-6 text-left">
+      {/* Top Bar with Back and More options */}
+      <div className="flex items-center justify-between pt-1">
+        <button
+          onClick={() => window.history.back()}
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center -ml-2 rounded-full transition active:scale-95 ${
+            isDark ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-black'
+          }`}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-6 h-6 stroke-[2.2px]" />
+        </button>
 
-      {/* Hero Banner & Artist Header */}
-      <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl relative">
-        <div className="h-44 sm:h-56 bg-gradient-to-r from-rose-950 via-slate-900 to-indigo-950 relative overflow-hidden">
-          {artist.bannerUrl && (
-            <img
-              src={artist.bannerUrl}
-              alt={artist.artistName}
-              className="w-full h-full object-cover opacity-40 mix-blend-overlay"
-            />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
+        <button
+          onClick={() => {
+            if (navigator.share) {
+              navigator.share({
+                title: artistName,
+                text: `Listen to ${artistName} on Projects Mandatory`,
+                url: window.location.href,
+              }).catch(() => {});
+            } else {
+              navigator.clipboard.writeText(window.location.href);
+              showToast('Artist profile link copied!', 'success');
+            }
+          }}
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 rounded-full transition active:scale-95 ${
+            isDark ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-black'
+          }`}
+          aria-label="Share artist"
+        >
+          <Share2 className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* ===================================================
+          ARTIST HEADER: CENTERED CIRCLE, NAME, VERIFIED, LISTENERS
+          =================================================== */}
+      <div className="flex flex-col items-center text-center space-y-3">
+        {/* Centered Circular Artist Image with subtle border */}
+        <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden shadow-2xl ring-4 ring-[#1455D9]/30">
+          <img
+            src={artistAvatar}
+            alt={artistName}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+          />
         </div>
 
-        <div className="p-6 sm:p-8 pt-0 relative -mt-16 sm:-mt-20 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5">
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl overflow-hidden border-4 border-slate-900 shadow-2xl bg-slate-800 shrink-0">
-              <img
-                src={artist.avatarUrl}
-                alt={artist.artistName}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-white font-['Syne',sans-serif]">
-                  {artist.artistName}
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold uppercase tracking-wider">
-                  Verified Artist
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-400 font-medium">
-                {artist.genres?.join(' • ') || 'Afro-fusion'} • Projects Mandatory Creator
-              </p>
+        {/* Name with Verified Green Indicator (#18A558) */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-center gap-1.5">
+            <h1
+              className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
+                isDark ? 'text-white' : 'text-[#111827]'
+              }`}
+            >
+              {artistName}
+            </h1>
+            <div
+              className="w-5 h-5 rounded-full bg-[#18A558] text-white flex items-center justify-center shadow-sm"
+              title="Verified Artist"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5px]" />
             </div>
           </div>
 
-          {/* Action CTAs */}
-          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            <button
-              onClick={() => setIsSupportModalOpen(true)}
-              className="flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-950/60 transition flex items-center justify-center gap-2 active:scale-95"
-            >
-              <Heart className="w-4 h-4 fill-white" />
-              <span>Support & Tip Artist</span>
-            </button>
-            <button
-              onClick={handleShareWhatsApp}
-              className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
-              title="Share on WhatsApp"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span>Share</span>
-            </button>
-            <button
-              onClick={handleCopyLink}
-              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition"
-              title="Copy Profile Link"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-          </div>
+          <p className="text-xs sm:text-sm text-slate-400 font-medium">
+            128K monthly listeners
+          </p>
         </div>
 
-        {/* Bio & Backing Summary */}
-        <div className="p-6 sm:p-8 pt-2 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-2">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Artist Biography
-            </h3>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {artist.bio}
-            </p>
-          </div>
+        {/* Action Row: Follow Button + Tip Artist + VIP Fan Club */}
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+          <button
+            onClick={() => {
+              setIsFollowing(!isFollowing);
+              showToast(isFollowing ? `Unfollowed ${artistName}` : `Following ${artistName}`, 'info');
+            }}
+            className={`min-h-[40px] px-5 py-2 rounded-full text-xs font-bold transition active:scale-95 shadow-sm ${
+              isFollowing
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                : 'bg-[#1455D9] hover:bg-[#0f44b3] text-white'
+            }`}
+          >
+            {isFollowing ? 'Following' : 'Follow'}
+          </button>
 
-          <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2">
-            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Direct Fan Monetization</span>
-            </h4>
-            <p className="text-xs text-slate-400">
-              When you buy tracks or tip {artist.artistName}, <strong className="text-emerald-400">70%</strong> is credited directly to their creator wallet via Airtel Money & Mpamba.
-            </p>
-          </div>
+          <button
+            onClick={() => setShowTipModal(true)}
+            className={`min-h-[40px] px-4 py-2 rounded-full text-xs font-bold border transition active:scale-95 flex items-center gap-1.5 ${
+              isDark
+                ? 'bg-[#11151F] border-slate-700 text-white hover:border-slate-600'
+                : 'bg-white border-[#E5E7EB] text-[#111827] hover:border-slate-300 shadow-sm'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5 text-[#18A558]" />
+            <span>Tip Artist</span>
+          </button>
+
+          <button
+            onClick={() => setShowMembershipModal(true)}
+            className="min-h-[40px] px-4 py-2 rounded-full text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-amber-950/40"
+          >
+            <Crown className="w-3.5 h-3.5 fill-current" />
+            <span>VIP Fan Club</span>
+          </button>
         </div>
       </div>
 
-      {/* Discography & Tracks */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-white font-['Syne',sans-serif]">
-              Official Master Catalog ({artistSongs.length})
-            </h2>
-            <p className="text-xs text-slate-400">Purchase high-bitrate studio masters and support {artist.artistName}</p>
-          </div>
+      {/* ===================================================
+          TABS: POPULAR | RELEASES | MERCH | EVENTS | ABOUT
+          =================================================== */}
+      <div className="border-b border-slate-200 dark:border-slate-800">
+        <div className="flex justify-around overflow-x-auto">
+          {[
+            { id: 'popular' as const, label: 'Popular' },
+            { id: 'releases' as const, label: 'Releases' },
+            { id: 'merch' as const, label: `Merch (${merchItems.length})` },
+            { id: 'events' as const, label: `Events (${eventsList.length})` },
+            { id: 'about' as const, label: 'About' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`py-3 px-2 text-xs sm:text-sm font-bold border-b-2 transition whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-[#1455D9] text-[#1455D9]'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {artistSongs.length === 0 ? (
-          <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-3">
-            <Disc className="w-10 h-10 text-slate-600 mx-auto" />
-            <p className="text-xs text-slate-400">No published tracks available yet for this artist.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {artistSongs.map((song) => {
-              const isPlaying = playingSongId === song.id;
-              return (
-                <div
-                  key={song.id}
-                  className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-4"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-800 shrink-0 group">
-                      <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover" />
-                      {song.audioFilePath && (
-                        <button
-                          onClick={() => handleTogglePlay(song)}
-                          className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                        >
-                          {isPlaying ? <Pause className="w-5 h-5 text-white" /> : <Play className="w-5 h-5 text-white" />}
-                        </button>
-                      )}
-                    </div>
+      {/* ===================================================
+          TAB 1: POPULAR (NUMBERED 1 TO 5 LIST)
+          =================================================== */}
+      {activeTab === 'popular' && (
+        <div className="space-y-1.5">
+          {displaySongs.slice(0, 5).map((song, index) => {
+            const isThisPlaying = currentSong?.id === song.id && isPlaying;
+
+            return (
+              <div
+                key={song.id}
+                onClick={() => playSong(song, displaySongs)}
+                className={`p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition select-none active:scale-[0.99] border ${
+                  isThisPlaying
+                    ? isDark
+                      ? 'bg-slate-800/80 border-[#1455D9]/50'
+                      : 'bg-blue-50/70 border-[#1455D9]/40'
+                    : isDark
+                    ? 'bg-[#11151F] border-slate-800/80 hover:bg-slate-800/40'
+                    : 'bg-white border-[#E5E7EB] hover:bg-slate-50'
+                }`}
+              >
+                {/* Left: Rank Number + Artwork + Title */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="w-5 text-center font-mono font-bold text-xs text-slate-400">
+                    {index + 1}
+                  </span>
+
+                  <img
+                    src={song.coverImage}
+                    alt={song.title}
+                    className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+
+                  <div className="min-w-0 flex-1 text-left">
+                    <h4
+                      className={`text-sm font-bold truncate leading-tight ${
+                        isThisPlaying ? 'text-[#1455D9]' : isDark ? 'text-white' : 'text-[#111827]'
+                      }`}
+                    >
+                      {song.title}
+                    </h4>
+                    <p className="text-xs text-slate-400 truncate">
+                      {(song.downloadCount || 1200).toLocaleString()} streams
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right: Duration */}
+                <span className="text-xs text-slate-400 font-mono">
+                  {song.duration || '3:30'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ===================================================
+          TAB 2: RELEASES (GRID OF ALBUMS/SINGLES)
+          =================================================== */}
+      {activeTab === 'releases' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+          {displaySongs.map((song) => (
+            <div
+              key={song.id}
+              onClick={() => playSong(song, displaySongs)}
+              className="group cursor-pointer space-y-2 text-left"
+            >
+              <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-md">
+                <img
+                  src={song.coverImage}
+                  alt={song.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+              </div>
+              <h4 className="text-xs font-bold text-white truncate">{song.title}</h4>
+              <p className="text-[11px] text-slate-400">{song.genre || 'Single'}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ===================================================
+          TAB 3: MERCHANDISE STOREFRONT
+          =================================================== */}
+      {activeTab === 'merch' && (
+        <div className="space-y-4">
+          {merchItems.length === 0 ? (
+            <div className="p-8 rounded-3xl bg-slate-900/50 border border-slate-800 text-center space-y-2">
+              <ShoppingBag className="w-10 h-10 text-slate-600 mx-auto" />
+              <h4 className="text-sm font-bold text-white">No Merch Available Yet</h4>
+              <p className="text-xs text-slate-400">Official apparel and merchandise drops will appear here soon.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {merchItems.map((item) => (
+                <div key={item.id} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex gap-3">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="w-16 h-16 rounded-xl object-cover shrink-0"
+                  />
+                  <div className="min-w-0 flex-1 flex flex-col justify-between">
                     <div>
+                      <h4 className="font-bold text-white text-xs truncate">{item.title}</h4>
+                      <p className="text-[11px] text-slate-400 line-clamp-1">{item.description}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-white text-xs">
+                        MK {item.priceMWK.toLocaleString()}
+                      </span>
                       <button
-                        onClick={() => onSelectSong(song.id)}
-                        className="text-sm font-bold text-white hover:text-rose-400 text-left line-clamp-1 transition"
+                        onClick={() => showToast(`Selected "${item.title}". Pre-order checkout ready!`, 'success')}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px]"
                       >
-                        {song.title}
+                        Order
                       </button>
-                      <div className="text-xs text-slate-400">
-                        {song.genre} • <span className="text-emerald-400 font-bold">MK {song.priceMWK.toLocaleString()}</span>
-                      </div>
                     </div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* ===================================================
+          TAB 4: LIVE CONCERTS & EVENTS
+          =================================================== */}
+      {activeTab === 'events' && (
+        <div className="space-y-3">
+          {eventsList.length === 0 ? (
+            <div className="p-8 rounded-3xl bg-slate-900/50 border border-slate-800 text-center space-y-2">
+              <Ticket className="w-10 h-10 text-slate-600 mx-auto" />
+              <h4 className="text-sm font-bold text-white">No Upcoming Concerts</h4>
+              <p className="text-xs text-slate-400">Stay tuned for upcoming tour dates and acoustic sessions.</p>
+            </div>
+          ) : (
+            eventsList.map((evt) => (
+              <div key={evt.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-white text-sm">{evt.eventName}</h4>
+                  <div className="text-xs text-slate-400">
+                    {evt.venue}, {evt.city} • {new Date(evt.eventDate).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono font-bold text-amber-400 text-xs mb-1">
+                    From MK {(evt.ticketTypes[0]?.priceMWK || 5000).toLocaleString()}
+                  </div>
                   <button
-                    onClick={() => onBuy(song)}
-                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-md shadow-rose-950/50 flex items-center gap-1.5 shrink-0 transition"
+                    onClick={() => showToast(`Tickets for "${evt.eventName}" are reserved!`, 'success')}
+                    className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs"
                   >
-                    <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Buy</span>
+                    Get Ticket
                   </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Recent Supporter Feed */}
-      {tips.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold text-white font-['Syne',sans-serif] flex items-center gap-2">
-            <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-            <span>Recent Backers & Fan Messages ({tips.length})</span>
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            {tips.slice(0, 6).map((tip) => (
-              <div key={tip.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-white">{tip.supporterName}</span>
-                  <span className="font-bold text-emerald-400">MK {tip.amountMWK.toLocaleString()}</span>
-                </div>
-                {tip.message && (
-                  <p className="text-xs text-slate-300 italic line-clamp-2">
-                    &quot;{tip.message}&quot;
-                  </p>
-                )}
-                <span className="text-[10px] text-slate-500 block">
-                  {new Date(tip.createdAt).toLocaleDateString()}
-                </span>
               </div>
-            ))}
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ===================================================
+          TAB 5: ABOUT
+          =================================================== */}
+      {activeTab === 'about' && (
+        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 text-xs text-slate-300 leading-relaxed">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Biography</h3>
+          <p>
+            {artistName} is an acclaimed musical pioneer redefining contemporary African rhythms, blending authentic storytelling with energetic afro-fusion beats.
+          </p>
+          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-slate-400">
+            <span>Origin: Lilongwe, Malawi</span>
+            <span>Joined: 2026</span>
           </div>
         </div>
       )}
 
-      {/* Support Artist Modal */}
-      <SupportArtistModal
-        artistId={artist.id}
-        artistName={artist.artistName}
-        artistAvatar={artist.avatarUrl}
-        isOpen={isSupportModalOpen}
-        onClose={() => setIsSupportModalOpen(false)}
-      />
+      {/* Modal: Tip Artist */}
+      {showTipModal && (
+        <ArtistTipModal
+          artistId={artistId}
+          artistName={artistName}
+          isOpen={showTipModal}
+          onClose={() => setShowTipModal(false)}
+          onTipSuccess={() => {
+            showToast(`Thank you! Tip sent to ${artistName}`, 'success');
+          }}
+        />
+      )}
+
+      {/* Modal: VIP Fan Club */}
+      {showMembershipModal && (
+        <ArtistFanMembershipModal
+          artistId={artistId}
+          artistName={artistName}
+          userId={user?.id || 'guest'}
+          userEmail={user?.email || 'fan@example.com'}
+          userName={user?.name || 'Loyal Fan'}
+          isOpen={showMembershipModal}
+          onClose={() => setShowMembershipModal(false)}
+          onJoinSuccess={() => {
+            showToast(`You are now an official VIP member of ${artistName}!`, 'success');
+          }}
+        />
+      )}
     </div>
   );
 };

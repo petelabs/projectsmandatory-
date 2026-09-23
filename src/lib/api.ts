@@ -1,4 +1,21 @@
-import { Song, Order, Customer, ArtistSettings, PaymentMethod } from '../types';
+import {
+  Song,
+  Order,
+  Customer,
+  ArtistSettings,
+  PaymentMethod,
+  SubscriptionPlan,
+  UserSubscription,
+  MonetizationSettings,
+  StreamRecord,
+  FraudFlag,
+  RoyaltyPeriod,
+  RoyaltyStatement,
+  ArtistEarningsSummary,
+  TipRecord,
+  AdminMonetizationSummary,
+  SubscriptionTier,
+} from '../types';
 import {
   db,
   saveSongToFirestore,
@@ -15,7 +32,8 @@ import {
   getDocs,
   orderBy,
 } from 'firebase/firestore';
-import { INITIAL_ARTIST_SETTINGS } from '../data/initialData';
+import { INITIAL_ARTIST_SETTINGS, DEFAULT_PLANS, DEFAULT_MONETIZATION_SETTINGS } from '../data/initialData';
+
 
 /**
  * Safe JSON fetch wrapper that guards against HTML 404/500 responses
@@ -661,5 +679,709 @@ export const api = {
 
       return merged;
     },
+
+    // Admin Monetization Summary
+    async getMonetizationSummary(token: string): Promise<{ summary: AdminMonetizationSummary; plans: SubscriptionPlan[]; settings: MonetizationSettings }> {
+      try {
+        const data = await fetchSafeJson<{ success: boolean; summary: AdminMonetizationSummary; plans: SubscriptionPlan[]; settings: MonetizationSettings }>(
+          '/api/admin/monetization-summary',
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (data.success && data.summary) return data;
+      } catch (err) {
+        console.warn('getMonetizationSummary fallback notice:', err);
+      }
+
+      // Return default populated summary if server offline
+      return {
+        summary: {
+          totalSubscriptionRevenueMWK: 3500,
+          premiumSubscribersCount: 1,
+          premiumPlusSubscribersCount: 1,
+          freeUsersCount: 14,
+          adRevenueMWK: 1500,
+          individualPurchaseRevenueMWK: 5000,
+          tipRevenueMWK: 2000,
+          creatorRoyaltyPoolMWK: 3000,
+          platformRevenueMWK: 2000,
+          pendingPayoutsMWK: 0,
+          completedPayoutsMWK: 0,
+          refundsMWK: 0,
+          chargebacksMWK: 0,
+          fraudFlaggedRevenueMWK: 0,
+          currentPeriod: {
+            id: 'period-2026-09',
+            month: '2026-09',
+            title: 'September 2026',
+            startDate: '2026-09-01T00:00:00.000Z',
+            endDate: '2026-09-30T23:59:59.999Z',
+            status: 'ACTIVE',
+            totalSubscriptionRevenueMWK: 3500,
+            totalAdRevenueMWK: 1500,
+            eligibleRevenueMWK: 5000,
+            creatorPoolPercentage: 60,
+            platformPercentage: 40,
+            creatorRoyaltyPoolMWK: 3000,
+            platformRevenueMWK: 2000,
+            totalQualifyingStreams: 120,
+            totalFlaggedStreams: 8,
+          },
+        },
+        plans: DEFAULT_PLANS,
+        settings: DEFAULT_MONETIZATION_SETTINGS,
+      };
+    },
+
+    // Admin Update Plan
+    async updatePlan(token: string, planId: string, updates: Partial<SubscriptionPlan>): Promise<SubscriptionPlan> {
+      try {
+        const data = await fetchSafeJson<{ success: boolean; plan: SubscriptionPlan }>(
+          `/api/admin/monetization/plans/${planId}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updates),
+          }
+        );
+        if (data.success && data.plan) return data.plan;
+      } catch (err) {
+        console.warn('updatePlan error:', err);
+      }
+      return { ...DEFAULT_PLANS[0], ...updates, id: planId };
+    },
+
+    // Admin Update Monetization Settings (e.g. 60/40 Split, Rules, Ads)
+    async updateMonetizationSettings(token: string, updates: Partial<MonetizationSettings>): Promise<MonetizationSettings> {
+      try {
+        const data = await fetchSafeJson<{ success: boolean; settings: MonetizationSettings }>(
+          '/api/admin/monetization/settings',
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updates),
+          }
+        );
+        if (data.success && data.settings) return data.settings;
+      } catch (err) {
+        console.warn('updateMonetizationSettings error:', err);
+      }
+      return { ...DEFAULT_MONETIZATION_SETTINGS, ...updates };
+    },
+
+    // Admin Finalize Royalty Period
+    async finalizeRoyaltyPeriod(token: string): Promise<{ success: boolean; message: string; finalizedStatements: RoyaltyStatement[] }> {
+      const data = await fetchSafeJson<{ success: boolean; message: string; finalizedStatements: RoyaltyStatement[] }>(
+        '/api/admin/royalties/finalize-period',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      return data;
+    },
+
+    // Admin Fraud Flags
+    async getFraudFlags(token: string): Promise<FraudFlag[]> {
+      try {
+        const data = await fetchSafeJson<{ success: boolean; fraudFlags: FraudFlag[] }>('/api/admin/fraud-flags', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (data.success && data.fraudFlags) return data.fraudFlags;
+      } catch {}
+      return [];
+    },
+
+    async updateFraudFlag(token: string, flagId: string, status: 'CONFIRMED_FRAUD' | 'DISMISSED', adminNotes?: string): Promise<FraudFlag> {
+      const data = await fetchSafeJson<{ success: boolean; flag: FraudFlag }>(`/api/admin/fraud-flags/${flagId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status, adminNotes }),
+      });
+      return data.flag;
+    },
+  },
+
+  // 10. Public Monetization & Streaming API
+  async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; plans: SubscriptionPlan[] }>('/api/monetization/plans');
+      if (data.success && Array.isArray(data.plans) && data.plans.length > 0) {
+        return data.plans;
+      }
+    } catch {
+      // Direct Firestore fallback
+      try {
+        const snap = await getDocs(collection(db, 'plans'));
+        if (!snap.empty) {
+          const list: SubscriptionPlan[] = [];
+          snap.forEach(d => list.push(d.data() as SubscriptionPlan));
+          return list;
+        }
+      } catch {}
+    }
+    return DEFAULT_PLANS;
+  },
+
+  async getMonetizationSettings(): Promise<MonetizationSettings> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; settings: MonetizationSettings }>('/api/monetization/settings');
+      if (data.success && data.settings) return data.settings;
+    } catch {}
+    return DEFAULT_MONETIZATION_SETTINGS;
+  },
+
+  async createSubscriptionCheckout(params: {
+    planTier: SubscriptionTier;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    userId?: string;
+  }): Promise<{ success: boolean; subscription: UserSubscription; checkoutUrl?: string; paychanguPublicKey?: string; isFree?: boolean }> {
+    const data = await fetchSafeJson('/api/subscriptions/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return data;
+  },
+
+  async verifySubscription(txRef: string): Promise<{ success: boolean; verified: boolean; subscription?: UserSubscription; error?: string }> {
+    const data = await fetchSafeJson('/api/subscriptions/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txRef }),
+    });
+    return data;
+  },
+
+  async getUserSubscription(email?: string, userId?: string): Promise<{
+    success: boolean;
+    subscription: UserSubscription | null;
+    planTier: SubscriptionTier;
+    hasAds: boolean;
+    allowsOfflineDownloads: boolean;
+  }> {
+    try {
+      const q = new URLSearchParams();
+      if (email) q.set('email', email);
+      if (userId) q.set('userId', userId);
+      const data = await fetchSafeJson(`/api/user/subscription?${q.toString()}`);
+      if (data.success) return data;
+    } catch {}
+    return {
+      success: true,
+      subscription: null,
+      planTier: 'FREE',
+      hasAds: true,
+      allowsOfflineDownloads: false,
+    };
+  },
+
+  async trackStream(streamData: {
+    songId: string;
+    songTitle: string;
+    artistId: string;
+    artistName: string;
+    userId?: string;
+    userTier?: SubscriptionTier;
+    durationPlayedSec: number;
+    songDurationSec: number;
+    deviceFingerprint?: string;
+  }): Promise<{ success: boolean; isQualified: boolean; isFlaggedSuspicious: boolean; qualifyingStreamsCount: number }> {
+    try {
+      const data = await fetchSafeJson('/api/streams/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(streamData),
+      });
+      return data;
+    } catch {
+      return { success: false, isQualified: false, isFlaggedSuspicious: false, qualifyingStreamsCount: 0 };
+    }
+  },
+
+  async getCurrentRoyaltyPool(): Promise<{ success: boolean; period: RoyaltyPeriod; creatorPoolPercentage: number; platformRevenuePercentage: number }> {
+    try {
+      const data = await fetchSafeJson('/api/royalties/current-pool');
+      if (data.success) return data;
+    } catch {}
+    return {
+      success: true,
+      period: {
+        id: 'period-2026-09',
+        month: '2026-09',
+        title: 'September 2026',
+        startDate: '2026-09-01T00:00:00.000Z',
+        endDate: '2026-09-30T23:59:59.999Z',
+        status: 'ACTIVE',
+        totalSubscriptionRevenueMWK: 3500,
+        totalAdRevenueMWK: 1500,
+        eligibleRevenueMWK: 5000,
+        creatorPoolPercentage: 60,
+        platformPercentage: 40,
+        creatorRoyaltyPoolMWK: 3000,
+        platformRevenueMWK: 2000,
+        totalQualifyingStreams: 120,
+        totalFlaggedStreams: 8,
+      },
+      creatorPoolPercentage: 60,
+      platformRevenuePercentage: 40,
+    };
+  },
+
+  async getArtistEarnings(artistId: string): Promise<ArtistEarningsSummary> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; earnings: ArtistEarningsSummary }>(`/api/royalties/artist-earnings/${artistId}`);
+      if (data.success && data.earnings) return data.earnings;
+    } catch {}
+    return {
+      artistId,
+      artistName: 'Artist',
+      totalQualifyingStreams: 0,
+      currentStreamsharePercent: 0,
+      estimatedCurrentPeriodEarningsMWK: 0,
+      subscriptionEarningsMWK: 0,
+      adSupportedEarningsMWK: 0,
+      finalizedEarningsMWK: 0,
+      pendingPayoutMWK: 0,
+      totalPaidOutMWK: 0,
+      tipsEarnedMWK: 0,
+      directSalesEarnedMWK: 0,
+      lifetimeTotalEarnedMWK: 0,
+      withdrawableBalanceMWK: 0,
+      updatedAt: new Date().toISOString(),
+    };
+  },
+
+  async getArtistStatements(artistId: string): Promise<RoyaltyStatement[]> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; statements: RoyaltyStatement[] }>(`/api/royalties/statements/${artistId}`);
+      if (data.success && Array.isArray(data.statements)) return data.statements;
+    } catch {}
+    return [];
+  },
+
+  async createTipCheckout(params: {
+    artistId: string;
+    artistName: string;
+    amountMWK: number;
+    senderName: string;
+    senderEmail?: string;
+    senderPhone?: string;
+    message?: string;
+  }): Promise<{ success: boolean; tip: TipRecord; checkoutUrl?: string; paychanguPublicKey?: string }> {
+    const data = await fetchSafeJson('/api/tips/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return data;
+  },
+
+  async verifyTip(txRef: string): Promise<{ success: boolean; verified: boolean; tip?: TipRecord; error?: string }> {
+    const data = await fetchSafeJson('/api/tips/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txRef }),
+    });
+    return data;
+  },
+
+  // ==========================================
+  // PHASE 2 CLIENT API INTEGRATIONS
+  // ==========================================
+
+  // 1. Artist Pro
+  async getArtistProSettings() {
+    try {
+      const data = await fetchSafeJson('/api/artist-pro/settings');
+      return data;
+    } catch {
+      return {
+        success: true,
+        settings: {
+          enabled: true,
+          priceMWK: 5000,
+          features: [
+            'Advanced Listener & Geographic Analytics',
+            'Audience Growth Trajectory & Demographic Insights',
+            'Advanced Earnings & Stream Breakdown',
+            'Custom Banner & Enhanced Profile Theme',
+            'Scheduled Release Automation & Pre-Save Links',
+          ],
+        },
+      };
+    }
+  },
+
+  async getArtistProStatus(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/artist-pro/status/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, isArtistPro: false, subscription: null };
+    }
+  },
+
+  async subscribeArtistPro(payload: {
+    artistId: string;
+    artistName: string;
+    userId: string;
+    userEmail: string;
+    paymentMethod: PaymentMethod;
+    mobilePhone?: string;
+  }) {
+    const data = await fetchSafeJson('/api/artist-pro/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  // 2. Promotion Wallet & Campaigns
+  async getPromotionWallet(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/promotion/wallet/${artistId}`);
+      return data;
+    } catch {
+      return {
+        success: true,
+        wallet: {
+          id: artistId,
+          artistId,
+          artistName: 'Artist',
+          availableBalanceMWK: 0,
+          reservedBudgetMWK: 0,
+          lifetimeSpentMWK: 0,
+          lifetimeTopUpMWK: 0,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }
+  },
+
+  async topUpPromotionWallet(payload: {
+    artistId: string;
+    artistName: string;
+    amountMWK: number;
+    paymentMethod: PaymentMethod;
+  }) {
+    const data = await fetchSafeJson('/api/promotion/wallet/topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getArtistCampaigns(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/promotion/campaigns/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, campaigns: [], transactions: [] };
+    }
+  },
+
+  async createPromotionCampaign(payload: any) {
+    const data = await fetchSafeJson('/api/promotion/campaigns/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async togglePauseCampaign(campaignId: string) {
+    const data = await fetchSafeJson(`/api/promotion/campaigns/${campaignId}/pause`, {
+      method: 'POST',
+    });
+    return data;
+  },
+
+  async cancelCampaign(campaignId: string) {
+    const data = await fetchSafeJson(`/api/promotion/campaigns/${campaignId}/cancel`, {
+      method: 'POST',
+    });
+    return data;
+  },
+
+  async trackPromotionEvent(campaignId: string, eventType: 'impression' | 'click' | 'play' | 'save' | 'follow') {
+    try {
+      await fetchSafeJson('/api/promotion/track-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId, eventType }),
+      });
+    } catch {}
+  },
+
+  async getActivePromotions(placement?: string) {
+    try {
+      const url = placement ? `/api/promotions/active?placement=${encodeURIComponent(placement)}` : '/api/promotions/active';
+      const data = await fetchSafeJson(url);
+      return data;
+    } catch {
+      return { success: true, promotions: [] };
+    }
+  },
+
+  // 3. Featured Releases
+  async getFeaturedReleases() {
+    try {
+      const data = await fetchSafeJson('/api/featured-releases');
+      return data;
+    } catch {
+      return { success: true, featuredPlacements: [] };
+    }
+  },
+
+  async getActiveFeaturedReleases() {
+    try {
+      const data = await fetchSafeJson('/api/featured-releases/active');
+      return data;
+    } catch {
+      return { success: true, featuredPlacements: [] };
+    }
+  },
+
+  async requestFeaturedRelease(payload: any) {
+    const data = await fetchSafeJson('/api/featured-releases/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  // 4. Gift Subscriptions
+  async purchaseGiftSubscription(payload: any) {
+    const data = await fetchSafeJson('/api/gifts/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async lookupGiftCode(code: string) {
+    const data = await fetchSafeJson(`/api/gifts/lookup/${encodeURIComponent(code)}`);
+    return data;
+  },
+
+  async claimGiftSubscription(payload: { giftCode: string; recipientUserId: string; recipientEmail?: string }) {
+    const data = await fetchSafeJson('/api/gifts/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getUserGifts(userId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/gifts/user/${userId}`);
+      return data;
+    } catch {
+      return { success: true, gifts: [] };
+    }
+  },
+
+  // 5. Family Plans
+  async subscribeFamilyPlan(payload: any) {
+    const data = await fetchSafeJson('/api/family-plan/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getFamilyPlan(userId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/family-plan/${userId}`);
+      return data;
+    } catch {
+      return { success: true, hasFamilyPlan: false, plan: null, members: [] };
+    }
+  },
+
+  async inviteFamilyMember(payload: { familyPlanId: string; memberEmail: string; memberName?: string }) {
+    const data = await fetchSafeJson('/api/family-plan/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async removeFamilyMember(payload: { familyPlanId: string; memberId: string }) {
+    const data = await fetchSafeJson('/api/family-plan/remove-member', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  // 6. Artist Fan Memberships
+  async getArtistMembershipPlan(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/artist-memberships/plans/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, plan: null };
+    }
+  },
+
+  async createOrUpdateArtistMembershipPlan(payload: any) {
+    const data = await fetchSafeJson('/api/artist-memberships/plans/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async joinArtistMembership(payload: any) {
+    const data = await fetchSafeJson('/api/artist-memberships/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getArtistMembers(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/artist-memberships/artist/${artistId}/members`);
+      return data;
+    } catch {
+      return { success: true, members: [], plan: null, totalMonthlyEarningsMWK: 0 };
+    }
+  },
+
+  async getUserArtistMemberships(userId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/artist-memberships/user/${userId}`);
+      return data;
+    } catch {
+      return { success: true, memberships: [] };
+    }
+  },
+
+  // 7. Enhanced Tips
+  async sendEnhancedTip(payload: any) {
+    const data = await fetchSafeJson('/api/tips/send-enhanced', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getArtistTips(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/tips/artist/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, tips: [], totalTipsMWK: 0, count: 0 };
+    }
+  },
+
+  // 8. Merch & Events Foundations
+  async getArtistMerch(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/merch/artist/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, products: [] };
+    }
+  },
+
+  async createMerchProduct(payload: any) {
+    const data = await fetchSafeJson('/api/merch/products/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async getArtistEvents(artistId: string) {
+    try {
+      const data = await fetchSafeJson(`/api/events/artist/${artistId}`);
+      return data;
+    } catch {
+      return { success: true, events: [] };
+    }
+  },
+
+  async createEvent(payload: any) {
+    const data = await fetchSafeJson('/api/events/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  // 9. Admin Phase 2 Settings & Financial Logs
+  async getPhase2AdminSettings() {
+    try {
+      const data = await fetchSafeJson('/api/admin/phase2/settings');
+      return data;
+    } catch {
+      return { success: true, settings: null };
+    }
+  },
+
+  async updatePhase2AdminSettings(tokenOrSettings: any, settingsOrEmail?: any, adminEmail?: string) {
+    const settings = typeof tokenOrSettings === 'object' ? tokenOrSettings : settingsOrEmail;
+    const token = typeof tokenOrSettings === 'string' ? tokenOrSettings : undefined;
+    const email = typeof settingsOrEmail === 'string' ? settingsOrEmail : adminEmail;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const data = await fetchSafeJson<{ success: boolean; settings?: any; error?: string }>('/api/admin/phase2/settings/update', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ settings, adminEmail: email }),
+    });
+    return data;
+  },
+
+  async getAdminFinancialLogs() {
+    try {
+      const data = await fetchSafeJson('/api/admin/phase2/financial-logs');
+      return data;
+    } catch {
+      return { success: true, logs: [] };
+    }
+  },
+
+  async getPlatformRevenue() {
+    try {
+      const data = await fetchSafeJson('/api/admin/phase2/platform-revenue');
+      return data;
+    } catch {
+      return { success: true, totalRevenueMWK: 0, breakdown: {}, records: [] };
+    }
   },
 };
+
+

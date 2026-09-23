@@ -1,8 +1,27 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Download, ShieldCheck, FileAudio, Calendar, Disc, CheckCircle, Sparkles, Tag, Layers, Share2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Download,
+  ShieldCheck,
+  FileAudio,
+  Calendar,
+  Disc,
+  CheckCircle,
+  Sparkles,
+  Tag,
+  Layers,
+  Share2,
+  Copy,
+  MessageCircle,
+  Heart,
+  TrendingUp,
+  Zap,
+} from 'lucide-react';
 import { Song } from '../types';
 import { Badge } from '../components/common/Badge';
 import { useToast } from '../context/ToastContext';
+import { useArtist } from '../context/ArtistContext';
+import { useAuth } from '../context/AuthContext';
 
 interface SongDetailPageProps {
   song: Song;
@@ -17,22 +36,42 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'lyrics' | 'license'>('details');
   const { showToast } = useToast();
+  const { isArtist, artistProfile, createSongBoostLink } = useArtist();
+  const { user } = useAuth();
 
-  const handleShare = () => {
+  // Generate unique boost referral link
+  const boostLink = isArtist && artistProfile
+    ? createSongBoostLink(song.id)
+    : `${window.location.origin}/song/${song.id}`;
+
+  const handleCopyBoostLink = () => {
+    navigator.clipboard.writeText(boostLink);
+    showToast(isArtist ? 'Track Share & Boost referral link copied!' : 'Song link copied to clipboard!', 'success');
+  };
+
+  const handleShareToWhatsApp = () => {
+    const text = isArtist
+      ? `🔥 Listen to my official track "${song.title}" on Projects Mandatory! Buy the uncompressed studio master directly with Airtel Money or TNM Mpamba: ${boostLink}`
+      : `🔥 Check out "${song.title}" by ${song.artist} on Projects Mandatory! Official studio master download: ${boostLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleNativeShare = () => {
     if (navigator.share) {
       navigator.share({
         title: `${song.title} by ${song.artist}`,
-        text: `Buy and download ${song.title} on PROJECTS MANDATORY`,
-        url: window.location.href,
+        text: `Buy and download "${song.title}" on Projects Mandatory`,
+        url: boostLink,
       }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      showToast('Track link copied to clipboard!', 'success');
+      handleCopyBoostLink();
     }
   };
 
+  const artistShareMWK = Math.round(song.priceMWK * 0.7);
+
   return (
-    <div className="space-y-8 text-left animate-in fade-in">
+    <div className="space-y-8 text-left animate-in fade-in pb-12">
       
       {/* Top Back Navigation */}
       <div className="flex items-center justify-between">
@@ -44,20 +83,29 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           <span>Back to Music Catalog</span>
         </button>
 
-        <button
-          onClick={handleShare}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
-        >
-          <Share2 className="w-3.5 h-3.5" />
-          <span>Share</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareToWhatsApp}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 py-2 px-3 rounded-lg bg-emerald-950/40 border border-emerald-800/40 hover:bg-emerald-900/50 transition"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp</span>
+          </button>
+          <button
+            onClick={handleNativeShare}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Track Detail Hero Card */}
       <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 lg:p-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           
-          {/* Large Artwork (NO AUDIO PLAYER) */}
+          {/* Large Artwork */}
           <div className="lg:col-span-5 space-y-4">
             <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 shadow-2xl">
               <img
@@ -161,6 +209,17 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 </div>
               </div>
 
+              {/* 70% direct support callout */}
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <span>70% goes straight to the artist:</span>
+                </span>
+                <span className="text-emerald-400 font-mono font-bold">
+                  MK {artistShareMWK.toLocaleString()}
+                </span>
+              </div>
+
               <button
                 onClick={() => onBuy(song)}
                 className="w-full min-h-[52px] bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl shadow-xl shadow-rose-950/60 border border-rose-500/40 flex items-center justify-center gap-2.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
@@ -169,6 +228,44 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 <span>BUY & DOWNLOAD TRACK (MK {song.priceMWK.toLocaleString()})</span>
               </button>
             </div>
+
+            {/* ARTIST BOOST PANEL (Shown for artists or creators) */}
+            {isArtist && (
+              <div className="p-5 rounded-2xl bg-amber-950/30 border border-amber-800/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      Your Unique &apos;Share &amp; Boost&apos; Link
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-amber-400 font-mono bg-amber-950 px-2 py-0.5 rounded-full border border-amber-800">
+                    Growth Hub
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300">
+                  Share this unique link with your followers. Clicks and sales will be credited to your studio analytics.
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={boostLink}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono focus:outline-none"
+                  />
+                  <button
+                    onClick={handleCopyBoostLink}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0 flex items-center gap-1.5 transition"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -180,7 +277,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             onClick={() => setActiveTab('details')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
               activeTab === 'details'
-                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -191,8 +288,8 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               onClick={() => setActiveTab('lyrics')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
                 activeTab === 'lyrics'
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
+                : 'text-slate-400 hover:text-white'
               }`}
             >
               Lyrics
@@ -202,7 +299,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             onClick={() => setActiveTab('license')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
               activeTab === 'license'
-                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -219,7 +316,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 <strong>Title:</strong> {song.title} <br />
                 <strong>Primary Artist:</strong> {song.artist} <br />
                 {song.featuredArtists && <><strong>Featured Artists:</strong> {song.featuredArtists} <br /></>}
-                <strong>Producer:</strong> {song.producer || 'Mandatory Studios'} <br />
+                <strong>Producer:</strong> {song.producer || 'Projects Mandatory Studios'} <br />
                 <strong>Release Date:</strong> {song.releaseDate} <br />
                 <strong>Copyright:</strong> © 2026 PROJECTS MANDATORY. Master recording rights reserved.
               </p>

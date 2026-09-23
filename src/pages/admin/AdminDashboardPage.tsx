@@ -59,6 +59,8 @@ import {
   deleteSongSubmission,
   subscribeAllArtists,
   processArtistPayout,
+  approveArtistVerification,
+  rejectArtistVerification,
   OFFICIAL_WHATSAPP_NUMBER,
   OFFICIAL_WHATSAPP_LINK,
 } from '../../lib/firebase';
@@ -67,13 +69,15 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../context/ToastContext';
+import { AdminMonetizationTab } from '../../components/admin/AdminMonetizationTab';
 
 interface AdminDashboardPageProps {
   onLogout: () => void;
   onNavigateStore: () => void;
 }
 
-type AdminTab = 'songs' | 'submissions' | 'artists' | 'requests' | 'messages' | 'orders';
+type AdminTab = 'monetization' | 'submissions' | 'verification' | 'artists' | 'songs' | 'messages' | 'requests' | 'orders';
+
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onLogout,
@@ -90,6 +94,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [promoRequests, setPromoRequests] = useState<MusicPromotionRequest[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [submissionFilter, setSubmissionFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
+  const [verificationFilter, setVerificationFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
+  const [selectedArtistForVerificationReject, setSelectedArtistForVerificationReject] = useState<ArtistProfile | null>(null);
+  const [verificationRejectFeedback, setVerificationRejectFeedback] = useState<string>('');
+  const [isProcessingVerification, setIsProcessingVerification] = useState<string | null>(null);
   const [requestFilter, setRequestFilter] = useState<'ALL' | 'PENDING' | 'ACCEPTED' | 'REJECTED'>('ALL');
   const [messageFilter, setMessageFilter] = useState<'ALL' | 'UNREAD' | 'READ'>('ALL');
   const [isLoading, setIsLoading] = useState(true);
@@ -222,6 +230,37 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
+  // Approve Artist Verification Request
+  const handleApproveVerification = async (artist: ArtistProfile) => {
+    setIsProcessingVerification(artist.id);
+    try {
+      await approveArtistVerification(artist.id);
+      showToast(`Artist "${artist.artistName}" approved! Direct publishing is now active for them.`, 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to approve verification';
+      showToast(msg, 'error');
+    } finally {
+      setIsProcessingVerification(null);
+    }
+  };
+
+  // Reject Artist Verification Request
+  const handleConfirmRejectVerification = async () => {
+    if (!selectedArtistForVerificationReject) return;
+    setIsProcessingVerification(selectedArtistForVerificationReject.id);
+    try {
+      await rejectArtistVerification(selectedArtistForVerificationReject.id, verificationRejectFeedback.trim());
+      showToast(`Verification rejected for ${selectedArtistForVerificationReject.artistName}. Feedback sent.`, 'info');
+      setSelectedArtistForVerificationReject(null);
+      setVerificationRejectFeedback('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to reject verification';
+      showToast(msg, 'error');
+    } finally {
+      setIsProcessingVerification(null);
+    }
+  };
+
   // Process Payout Disbursement
   const handleDisbursePayout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,7 +295,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       setEditingSong({
         id: `song-${Date.now()}`,
         title: '',
-        artist: 'Hapsin',
+        artist: '',
         featuredArtists: '',
         genre: 'Afro-fusion',
         releaseDate: new Date().toISOString().split('T')[0],
@@ -319,7 +358,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       const songPayload: Song = {
         id: editingSong.id || `song-${Date.now()}`,
         title: editingSong.title,
-        artist: editingSong.artist || 'Hapsin',
+        artist: editingSong.artist || 'Projects Mandatory',
         featuredArtists: editingSong.featuredArtists || '',
         genre: editingSong.genre || 'Afro-fusion',
         releaseDate: editingSong.releaseDate || new Date().toISOString().split('T')[0],
@@ -390,6 +429,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     .reduce((sum, o) => sum + (o.amount || 0), 0);
   const totalPaidOrders = orders.filter((o) => o.status === 'PAID').length;
   const pendingSubmissionsCount = submissions.filter((s) => s.status === 'PENDING').length;
+  const pendingVerificationCount = artists.filter((a) => a.verificationStatus === 'PENDING_VERIFICATION').length;
   const unreadMessagesCount = contactMessages.filter((m) => !m.read).length;
 
   const filteredSubmissions = submissions.filter((s) => {
@@ -503,7 +543,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* Tabs Bar */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
         {[
-          { id: 'submissions', label: `Artist Approvals (${pendingSubmissionsCount})`, icon: UploadCloud, badge: pendingSubmissionsCount > 0 },
+          { id: 'monetization', label: 'Monetisation & Royalties', icon: DollarSign },
+          { id: 'submissions', label: `Track Approvals (${pendingSubmissionsCount})`, icon: UploadCloud, badge: pendingSubmissionsCount > 0 },
+          { id: 'verification', label: `Artist Verification (${pendingVerificationCount})`, icon: ShieldCheck, badge: pendingVerificationCount > 0 },
           { id: 'artists', label: `Artists & Payouts (${artists.length})`, icon: Users },
           { id: 'songs', label: `Live Catalog (${songs.length})`, icon: Music },
           { id: 'messages', label: `Contact Inquiries (${unreadMessagesCount})`, icon: MessageSquare, badge: unreadMessagesCount > 0 },
@@ -532,8 +574,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         })}
       </div>
 
+      {/* TAB 0: MONETISATION & CREATOR ROYALTY POOL LEDGER */}
+      {activeTab === 'monetization' && (
+        <AdminMonetizationTab token={adminEmail || 'admin-auth-token'} />
+      )}
+
       {/* TAB 1: ARTIST SONG SUBMISSIONS & APPROVALS */}
       {activeTab === 'submissions' && (
+
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -694,6 +742,178 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: ARTIST VERIFICATION REQUESTS */}
+      {activeTab === 'verification' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+                Artist Verification & Direct Publishing Requests
+              </h3>
+              <p className="text-xs text-slate-400">
+                Approving an artist grants them &quot;Verified Creator&quot; status and enables direct live publishing to the storefront.
+              </p>
+            </div>
+
+            {/* Verification Filters */}
+            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+              {(['ALL', 'PENDING', 'VERIFIED', 'REJECTED'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setVerificationFilter(filter)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                    verificationFilter === filter
+                      ? 'bg-rose-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(() => {
+            const filteredArtists = artists.filter((a) => {
+              if (verificationFilter === 'ALL') return true;
+              if (verificationFilter === 'PENDING') return a.verificationStatus === 'PENDING_VERIFICATION';
+              if (verificationFilter === 'VERIFIED') return a.verificationStatus === 'VERIFIED' || a.isVerified;
+              if (verificationFilter === 'REJECTED') return a.verificationStatus === 'REJECTED';
+              return true;
+            });
+
+            if (filteredArtists.length === 0) {
+              return (
+                <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
+                  No artist verification requests in &quot;{verificationFilter}&quot; status.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                {filteredArtists.map((artist) => {
+                  const isProcessing = isProcessingVerification === artist.id;
+                  const isAlreadyVerified = artist.verificationStatus === 'VERIFIED' || artist.isVerified;
+                  const isPending = artist.verificationStatus === 'PENDING_VERIFICATION';
+                  const details = artist.verificationDetails;
+
+                  return (
+                    <div
+                      key={artist.id}
+                      className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl"
+                    >
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border-2 border-indigo-500/40 shrink-0">
+                            <img
+                              src={artist.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=200&auto=format&fit=crop'}
+                              alt={artist.artistName}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-base font-bold text-white font-['Syne',sans-serif]">
+                                {artist.artistName}
+                              </h4>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                isAlreadyVerified
+                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
+                                  : isPending
+                                  ? 'bg-amber-950 text-amber-400 border border-amber-500/40'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              }`}>
+                                {artist.verificationStatus || 'UNVERIFIED'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400">
+                              {artist.email} • {artist.phone} • {artist.genres?.join(', ') || 'Afro-fusion'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {details?.requestedAt && (
+                          <span className="text-[11px] font-mono text-slate-500">
+                            Requested: {new Date(details.requestedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Verification Details Box */}
+                      {details && (
+                        <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                          {details.socialLinks && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-slate-400 font-semibold w-24 shrink-0">Social Links:</span>
+                              <span className="text-indigo-400 break-all">{details.socialLinks}</span>
+                            </div>
+                          )}
+                          {details.portfolioCatalogUrl && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-slate-400 font-semibold w-24 shrink-0">Catalog Link:</span>
+                              <a
+                                href={details.portfolioCatalogUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-emerald-400 hover:underline break-all flex items-center gap-1"
+                              >
+                                <span>{details.portfolioCatalogUrl}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          )}
+                          {details.notes && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-slate-400 font-semibold w-24 shrink-0">Experience Notes:</span>
+                              <span className="text-slate-300 italic">&quot;{details.notes}&quot;</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="pt-1 flex flex-wrap items-center justify-end gap-2.5">
+                        {!isAlreadyVerified && (
+                          <>
+                            <button
+                              onClick={() => setSelectedArtistForVerificationReject(artist)}
+                              disabled={isProcessing}
+                              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 text-xs font-bold transition flex items-center gap-1.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Reject Request</span>
+                            </button>
+
+                            <Button
+                              variant="success"
+                              size="sm"
+                              isLoading={isProcessing}
+                              onClick={() => handleApproveVerification(artist)}
+                              className="px-5 py-2 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-emerald-950/60"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Approve & Grant Direct Posting</span>
+                            </Button>
+                          </>
+                        )}
+
+                        {isAlreadyVerified && (
+                          <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Verified Creator (Direct live posting active)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1067,7 +1287,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <input
                     type="text"
                     required
-                    value={editingSong.artist || 'Hapsin'}
+                    placeholder="Artist / Creator Name"
+                    value={editingSong.artist || ''}
                     onChange={(e) => setEditingSong({ ...editingSong, artist: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                   />
@@ -1171,6 +1392,41 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </button>
               <button
                 onClick={handleConfirmReject}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+              >
+                Send Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REJECT ARTIST VERIFICATION WITH FEEDBACK */}
+      {selectedArtistForVerificationReject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white font-['Syne',sans-serif]">
+              Reject Verification for {selectedArtistForVerificationReject.artistName}
+            </h3>
+            <p className="text-xs text-slate-400">
+              Provide feedback on what is required (e.g. valid catalog link, social handle verification) so the artist can update and re-apply.
+            </p>
+            <textarea
+              rows={3}
+              placeholder="e.g. Please provide your active Instagram handle or official YouTube channel link for catalog confirmation."
+              value={verificationRejectFeedback}
+              onChange={(e) => setVerificationRejectFeedback(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setSelectedArtistForVerificationReject(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRejectVerification}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
               >
                 Send Rejection

@@ -16,6 +16,254 @@
       },
       "required": ["uid", "email"]
     },
+    "SubscriptionPlan": {
+      "title": "SubscriptionPlan",
+      "description": "Configurable platform subscription tier (Free, Premium, Premium Plus)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tier": { "type": "string", "enum": ["FREE", "PREMIUM", "PREMIUM_PLUS"] },
+        "priceMWK": { "type": "number" },
+        "interval": { "type": "string", "enum": ["month", "year"] },
+        "hasAds": { "type": "boolean" },
+        "allowsOfflineDownloads": { "type": "boolean" },
+        "audioQuality": { "type": "string" },
+        "features": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "tier", "priceMWK", "isActive"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "User subscription record tracking active access and expiry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "planId": { "type": "string" },
+        "planTier": { "type": "string", "enum": ["FREE", "PREMIUM", "PREMIUM_PLUS"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "EXPIRED", "CANCELLED", "PENDING"] },
+        "amountMWK": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "txRef": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "autoRenew": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "planTier", "status", "expiresAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Server-verified payment transaction log for subscriptions, purchases, and tips",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "txRef": { "type": "string" },
+        "paychanguRef": { "type": "string" },
+        "type": { "type": "string", "enum": ["SUBSCRIPTION", "SONG_PURCHASE", "ALBUM_PURCHASE", "TIP"] },
+        "amountMWK": { "type": "number" },
+        "customerEmail": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED", "CANCELLED", "EXPIRED", "REFUNDED", "DISPUTED"] },
+        "verifiedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "txRef", "type", "amountMWK", "status"]
+    },
+    "Stream": {
+      "title": "Stream",
+      "description": "Listening stream record evaluated for legitimacy and royalty pool qualification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "songId": { "type": "string" },
+        "songTitle": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "userId": { "type": "string" },
+        "userTier": { "type": "string", "enum": ["FREE", "PREMIUM", "PREMIUM_PLUS"] },
+        "durationPlayedSec": { "type": "number" },
+        "songDurationSec": { "type": "number" },
+        "percentPlayed": { "type": "number" },
+        "isQualified": { "type": "boolean" },
+        "isFlaggedSuspicious": { "type": "boolean" },
+        "unqualifiedReason": { "type": "string" },
+        "fraudReason": { "type": "string" },
+        "periodMonth": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "songId", "artistId", "isQualified", "periodMonth", "timestamp"]
+    },
+    "RoyaltyPeriod": {
+      "title": "RoyaltyPeriod",
+      "description": "Monthly creator royalty pool ledger and platform split calculation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "month": { "type": "string" },
+        "title": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "CALCULATING", "FINALIZED", "CLOSED"] },
+        "totalSubscriptionRevenueMWK": { "type": "number" },
+        "totalAdRevenueMWK": { "type": "number" },
+        "eligibleRevenueMWK": { "type": "number" },
+        "creatorPoolPercentage": { "type": "number" },
+        "platformPercentage": { "type": "number" },
+        "creatorRoyaltyPoolMWK": { "type": "number" },
+        "platformRevenueMWK": { "type": "number" },
+        "totalQualifyingStreams": { "type": "number" },
+        "totalFlaggedStreams": { "type": "number" },
+        "finalizedAt": { "type": "string" },
+        "finalizedBy": { "type": "string" }
+      },
+      "required": ["id", "month", "status", "creatorRoyaltyPoolMWK", "totalQualifyingStreams"]
+    },
+    "RoyaltyStatement": {
+      "title": "RoyaltyStatement",
+      "description": "Immutable monthly royalty distribution statement generated for an artist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "periodId": { "type": "string" },
+        "periodMonth": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "artistEmail": { "type": "string" },
+        "totalCreatorPoolMWK": { "type": "number" },
+        "artistQualifyingStreams": { "type": "number" },
+        "totalPlatformQualifyingStreams": { "type": "number" },
+        "streamsharePercentage": { "type": "number" },
+        "calculatedCreatorAllocationMWK": { "type": "number" },
+        "adjustmentsMWK": { "type": "number" },
+        "finalAmountMWK": { "type": "number" },
+        "status": { "type": "string", "enum": ["DRAFT", "FINALIZED", "PAID"] },
+        "isImmutable": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "finalizedAt": { "type": "string" }
+      },
+      "required": ["id", "periodMonth", "artistId", "streamsharePercentage", "finalAmountMWK", "status"]
+    },
+    "ArtistEarnings": {
+      "title": "ArtistEarnings",
+      "description": "Aggregated live artist earnings, separating estimated vs finalized withdrawable balances",
+      "type": "object",
+      "properties": {
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "totalQualifyingStreams": { "type": "number" },
+        "currentStreamsharePercent": { "type": "number" },
+        "estimatedCurrentPeriodEarningsMWK": { "type": "number" },
+        "subscriptionEarningsMWK": { "type": "number" },
+        "adSupportedEarningsMWK": { "type": "number" },
+        "finalizedEarningsMWK": { "type": "number" },
+        "pendingPayoutMWK": { "type": "number" },
+        "totalPaidOutMWK": { "type": "number" },
+        "tipsEarnedMWK": { "type": "number" },
+        "directSalesEarnedMWK": { "type": "number" },
+        "withdrawableBalanceMWK": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["artistId", "finalizedEarningsMWK", "withdrawableBalanceMWK"]
+    },
+    "Tip": {
+      "title": "Tip",
+      "description": "Fan-to-artist monetary tips with platform fee deduction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "senderPhone": { "type": "string" },
+        "amountMWK": { "type": "number" },
+        "platformFeeMWK": { "type": "number" },
+        "artistAmountMWK": { "type": "number" },
+        "message": { "type": "string" },
+        "txRef": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED", "REFUNDED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "artistId", "amountMWK", "artistAmountMWK", "status"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Ownership rights record for purchased songs and albums",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "itemType": { "type": "string", "enum": ["SONG", "ALBUM"] },
+        "itemId": { "type": "string" },
+        "itemTitle": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "amountMWK": { "type": "number" },
+        "purchaseToken": { "type": "string" },
+        "tokenExpiresAt": { "type": "string" },
+        "maxDownloads": { "type": "number" },
+        "downloadCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PAID", "REFUNDED"] },
+        "purchasedAt": { "type": "string" }
+      },
+      "required": ["id", "itemId", "itemType", "customerEmail", "amountMWK", "status"]
+    },
+    "FraudFlag": {
+      "title": "FraudFlag",
+      "description": "Anti-fraud streaming anomaly or abusive pattern detection flag",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "streamId": { "type": "string" },
+        "songId": { "type": "string" },
+        "artistId": { "type": "string" },
+        "userId": { "type": "string" },
+        "reason": { "type": "string" },
+        "severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "affectedStreamsCount": { "type": "number" },
+        "estimatedFlaggedAmountMWK": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING_REVIEW", "CONFIRMED_FRAUD", "DISMISSED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "reason", "severity", "status", "createdAt"]
+    },
+    "PlatformRevenue": {
+      "title": "PlatformRevenue",
+      "description": "Ledger of platform retained share funding operations, hosting, bandwidth, and legal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "periodMonth": { "type": "string" },
+        "source": { "type": "string", "enum": ["SUBSCRIPTION_SHARE", "AD_REVENUE_SHARE", "PURCHASE_COMMISSION", "TIP_FEE"] },
+        "amountMWK": { "type": "number" },
+        "allocatedTo": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "periodMonth", "source", "amountMWK", "createdAt"]
+    },
+    "AdminSettings": {
+      "title": "AdminSettings",
+      "description": "Platform-wide financial, pool split %, anti-fraud rules, and ad configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "creatorRoyaltyPoolPercentage": { "type": "number" },
+        "platformRevenuePercentage": { "type": "number" },
+        "tipPlatformFeePercentage": { "type": "number" },
+        "qualifyingStreamRules": { "type": "object" },
+        "adSettings": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "creatorRoyaltyPoolPercentage", "platformRevenuePercentage"]
+    },
     "Artist": {
       "title": "Artist",
       "description": "Registered artist profile, payout credentials, and wallet balances",
@@ -57,23 +305,6 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "artistId", "title", "priceMWK", "status"]
-    },
-    "ArtistTip": {
-      "title": "ArtistTip",
-      "description": "Direct fan backing and supporter tips for artists",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "artistId": { "type": "string" },
-        "artistName": { "type": "string" },
-        "supporterName": { "type": "string" },
-        "amountMWK": { "type": "number" },
-        "artistShareMWK": { "type": "number" },
-        "platformShareMWK": { "type": "number" },
-        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED"] },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["id", "artistId", "amountMWK", "status"]
     },
     "ArtistPayout": {
       "title": "ArtistPayout",
@@ -122,6 +353,23 @@
       },
       "required": ["id", "txRef", "songId", "amount", "status"]
     },
+    "BoostReferral": {
+      "title": "BoostReferral",
+      "description": "Share & Boost unique song referral visits and invite tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "songId": { "type": "string" },
+        "code": { "type": "string" },
+        "source": { "type": "string" },
+        "convertedToPurchase": { "type": "boolean" },
+        "amountMWK": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "artistId", "code", "createdAt"]
+    },
     "ContactMessage": {
       "title": "ContactMessage",
       "description": "User messages submitted via the website contact form",
@@ -141,6 +389,58 @@
       "schema": { "$ref": "#/entities/User" },
       "description": "User profile collection"
     },
+    "/plans/{planId}": {
+      "schema": { "$ref": "#/entities/SubscriptionPlan" },
+      "description": "Subscription plans catalog"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/Subscription" },
+      "description": "User subscriptions"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Verified payment transactions"
+    },
+    "/streams/{streamId}": {
+      "schema": { "$ref": "#/entities/Stream" },
+      "description": "Legitimate and qualified listening streams"
+    },
+    "/royaltyPeriods/{periodId}": {
+      "schema": { "$ref": "#/entities/RoyaltyPeriod" },
+      "description": "Monthly creator pool calculations"
+    },
+    "/royaltyStatements/{statementId}": {
+      "schema": { "$ref": "#/entities/RoyaltyStatement" },
+      "description": "Immutable monthly creator royalty statements"
+    },
+    "/artistEarnings/{artistId}": {
+      "schema": { "$ref": "#/entities/ArtistEarnings" },
+      "description": "Live and finalized artist balances"
+    },
+    "/tips/{tipId}": {
+      "schema": { "$ref": "#/entities/Tip" },
+      "description": "Fan-to-artist direct tips"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": { "$ref": "#/entities/Purchase" },
+      "description": "Individual song/album ownership records"
+    },
+    "/payouts/{payoutId}": {
+      "schema": { "$ref": "#/entities/ArtistPayout" },
+      "description": "Disbursement records"
+    },
+    "/fraudFlags/{flagId}": {
+      "schema": { "$ref": "#/entities/FraudFlag" },
+      "description": "Anti-fraud and artificial stream detection records"
+    },
+    "/platformRevenue/{recordId}": {
+      "schema": { "$ref": "#/entities/PlatformRevenue" },
+      "description": "Platform retained revenue ledger"
+    },
+    "/adminSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/AdminSettings" },
+      "description": "Monetisation, split percentage, and stream qualification rules"
+    },
     "/artists/{artistId}": {
       "schema": { "$ref": "#/entities/Artist" },
       "description": "Registered artist profiles and payout setups"
@@ -149,14 +449,6 @@
       "schema": { "$ref": "#/entities/ArtistSubmission" },
       "description": "Artist song upload requests for admin review"
     },
-    "/artistTips/{tipId}": {
-      "schema": { "$ref": "#/entities/ArtistTip" },
-      "description": "Direct fan tips and support"
-    },
-    "/artistPayouts/{payoutId}": {
-      "schema": { "$ref": "#/entities/ArtistPayout" },
-      "description": "Artist payout records"
-    },
     "/songs/{songId}": {
       "schema": { "$ref": "#/entities/Song" },
       "description": "Published song catalog"
@@ -164,6 +456,10 @@
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
       "description": "Purchases and order ledger"
+    },
+    "/boostReferrals/{referralId}": {
+      "schema": { "$ref": "#/entities/BoostReferral" },
+      "description": "Share & Boost referral tracking events"
     },
     "/contactMessages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },

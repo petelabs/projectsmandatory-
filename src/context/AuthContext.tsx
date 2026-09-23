@@ -13,6 +13,8 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  activeRole: 'user' | 'artist';
+  switchRole: (role: 'user' | 'artist') => void;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, name?: string) => void;
   logout: () => Promise<void>;
@@ -25,6 +27,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<UserProfile | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [activeRole, setActiveRole] = useState<'user' | 'artist'>(() => {
+    try {
+      const saved = localStorage.getItem('pm_active_role');
+      if (saved === 'artist' || saved === 'user') return saved;
+    } catch {}
+    return 'user';
+  });
+
+  const switchRole = (role: 'user' | 'artist') => {
+    setActiveRole(role);
+    try {
+      localStorage.setItem('pm_active_role', role);
+    } catch {}
+    if (user) {
+      setUser((prev) => {
+        if (!prev) return null;
+        const updated: UserProfile = { ...prev, activeRole: role };
+        localStorage.setItem('pm_user_session', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
 
   // Initialize and listen to Firebase Auth changes
   useEffect(() => {
@@ -39,6 +63,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           name: currentFirebaseUser.displayName || currentFirebaseUser.email?.split('@')[0] || 'User',
           avatarUrl: currentFirebaseUser.photoURL || undefined,
           isGoogleUser: currentFirebaseUser.providerData.some((p) => p.providerId === 'google.com'),
+          activeRole,
         };
         setUser(mappedUser);
         localStorage.setItem('pm_user_session', JSON.stringify(mappedUser));
@@ -49,7 +74,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           const saved = localStorage.getItem('pm_user_session');
           if (saved) {
-            setUser(JSON.parse(saved));
+            const parsed = JSON.parse(saved);
+            setUser(parsed);
+            if (parsed.activeRole) {
+              setActiveRole(parsed.activeRole);
+            }
           } else {
             setUser(null);
           }
@@ -61,7 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeRole]);
 
   const loginWithGoogle = async () => {
     try {
@@ -124,6 +153,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         firebaseUser,
         isAuthenticated: !!user,
         isLoading,
+        activeRole,
+        switchRole,
         loginWithGoogle,
         loginWithEmail,
         logout,

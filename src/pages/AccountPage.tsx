@@ -1,196 +1,435 @@
 import React, { useState } from 'react';
-import { User, LogIn, LogOut, ShieldCheck, Mail, ShoppingBag, ArrowRight } from 'lucide-react';
+import {
+  User,
+  Settings,
+  ShieldCheck,
+  Crown,
+  Download,
+  Heart,
+  ListMusic,
+  CreditCard,
+  Sparkles,
+  HelpCircle,
+  LogOut,
+  ChevronRight,
+  Moon,
+  Sun,
+  Lock,
+  ExternalLink,
+  Gift,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Button } from '../components/common/Button';
-import { Input } from '../components/common/Input';
+import { useSubscription } from '../context/SubscriptionContext';
+import { usePlayback } from '../context/PlaybackContext';
+import { useTheme } from '../context/ThemeContext';
+import { useAdmin } from '../context/AdminContext';
 import { useToast } from '../context/ToastContext';
+import { GiftSubscriptionModal } from '../components/monetization/GiftSubscriptionModal';
+import { ClaimGiftModal } from '../components/monetization/ClaimGiftModal';
+import { FamilyPlanModal } from '../components/monetization/FamilyPlanModal';
 
 interface AccountPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, loginWithGoogle, loginWithEmail, logout } = useAuth();
+  const { user, isAuthenticated, logout, loginWithGoogle, loginAsGuest } = useAuth();
+  const { currentTier, subscription, canDownloadOffline } = useSubscription();
+  const { likedSongIds, offlineSongs } = usePlayback();
+  const { theme, toggleTheme, isDark } = useTheme();
+  const { isAdminAuthenticated } = useAdmin();
   const { showToast } = useToast();
 
-  const [emailInput, setEmailInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
-  const [isEmailLogin, setIsEmailLogin] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
+  const [showClaimGiftModal, setShowClaimGiftModal] = useState(false);
+  const [showFamilyModal, setShowFamilyModal] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    try {
-      await loginWithGoogle();
-      showToast('Signed in with Google successfully!', 'success');
-    } catch {
-      showToast('Google sign-in failed. Try email login.', 'error');
-    }
-  };
+  const displayName = user?.name || 'Chipo M.';
+  const displayEmail = user?.email || 'chipo@example.com';
+  const displayAvatar =
+    user?.photoURL ||
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop';
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput.trim() || !emailInput.includes('@')) {
-      showToast('Please enter a valid email address', 'error');
-      return;
-    }
-    loginWithEmail(emailInput, nameInput);
-    showToast(`Signed in as ${emailInput}`, 'success');
-  };
+  const isPremiumPlus = currentTier === 'PREMIUM_PLUS';
+  const isPremium = currentTier === 'PREMIUM';
 
-  if (isAuthenticated && user) {
-    return (
-      <div className="max-w-2xl mx-auto space-y-6 text-left animate-in fade-in">
-        <div className="rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-10 shadow-xl space-y-6">
-          
-          <div className="flex items-center justify-between pb-6 border-b border-slate-800">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-xl overflow-hidden">
-                {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-7 h-7" />
-                )}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">{user.name}</h2>
-                <p className="text-xs text-slate-400">{user.email}</p>
-                {user.isGoogleUser && (
-                  <span className="inline-block text-[10px] text-blue-400 font-semibold mt-0.5">
-                    Google Connected Account
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                logout();
-                showToast('Logged out of session', 'info');
-              }}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
-            </button>
-          </div>
-
-          {/* Shortcuts */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Account Management
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={() => onNavigate('/purchases')}
-                className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-left transition flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-rose-600/20 text-rose-400">
-                    <ShoppingBag className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">My Purchases</h4>
-                    <p className="text-[11px] text-slate-400">Download purchased tracks</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-500" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('/music')}
-                className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-left transition flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Music Store</h4>
-                    <p className="text-[11px] text-slate-400">Browse official releases</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const menuRows = [
+    {
+      id: 'library',
+      label: 'My Library',
+      count: `${likedSongIds.length} items`,
+      action: () => onNavigate('/library'),
+      icon: ListMusic,
+    },
+    {
+      id: 'downloads',
+      label: 'Downloads',
+      count: `${offlineSongs.length} songs`,
+      action: () => onNavigate('/library'),
+      icon: Download,
+    },
+    {
+      id: 'liked',
+      label: 'Liked Songs',
+      count: `${likedSongIds.length} songs`,
+      action: () => onNavigate('/library'),
+      icon: Heart,
+    },
+    {
+      id: 'plans',
+      label: 'Subscription & Plans',
+      count: currentTier === 'FREE' ? 'Free Pass' : currentTier.replace('_', ' '),
+      action: () => onNavigate('/pricing'),
+      icon: Crown,
+    },
+    {
+      id: 'family',
+      label: 'Family Plan Sharing',
+      count: 'Up to 6 accounts',
+      action: () => setShowFamilyModal(true),
+      icon: Users,
+    },
+    {
+      id: 'gift',
+      label: 'Gift a Subscription',
+      count: 'Send to a friend',
+      action: () => setShowGiftModal(true),
+      icon: Gift,
+    },
+    {
+      id: 'purchases',
+      label: 'Payment History & Purchases',
+      count: '',
+      action: () => onNavigate('/purchases'),
+      icon: CreditCard,
+    },
+    {
+      id: 'studio',
+      label: 'Artist Studio & Verification',
+      count: 'Creator Portal',
+      action: () => onNavigate('/artist/studio'),
+      icon: Sparkles,
+    },
+  ];
 
   return (
-    <div className="max-w-md mx-auto space-y-6 text-left animate-in fade-in py-4">
-      <div className="rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
-        
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-extrabold text-white font-['Syne',sans-serif]">
-            Sign In to Account
-          </h1>
-          <p className="text-xs text-slate-400">
-            Optional account to keep your purchase history synced across devices.
-          </p>
-        </div>
-
-        {/* Google Sign-in */}
-        <div className="space-y-3">
-          <button
-            onClick={handleGoogleLogin}
-            className="w-full min-h-[48px] rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2.5 transition active:scale-[0.98]"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>Continue with Google</span>
-          </button>
-
-          <div className="relative flex items-center justify-center my-4">
-            <div className="border-t border-slate-800 w-full"></div>
-            <span className="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase font-mono tracking-wider">
-              Or with email
-            </span>
-            <div className="border-t border-slate-800 w-full"></div>
+    <div className="space-y-5 pb-8 text-left">
+      
+      {/* ===================================================
+          PROFILE HEADER: AVATAR, NAME, EMAIL, SETTINGS GEAR
+          =================================================== */}
+      <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center gap-3">
+          <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-800 ring-4 ring-[#1455D9]/30">
+            <img
+              src={displayAvatar}
+              alt={displayName}
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
 
-          <form onSubmit={handleEmailSubmit} className="space-y-3">
-            <Input
-              label="Your Name (Optional)"
-              placeholder="e.g. Kondwani"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-            />
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="yourname@gmail.com"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              required
-            />
-            <Button type="submit" variant="secondary" size="md" className="w-full">
-              Sign In with Email
-            </Button>
-          </form>
+          <div className="text-left">
+            <h1
+              className={`text-lg sm:text-xl font-extrabold tracking-tight leading-tight ${
+                isDark ? 'text-white' : 'text-[#111827]'
+              }`}
+            >
+              {displayName}
+            </h1>
+            <p className="text-xs text-slate-400">{displayEmail}</p>
+          </div>
         </div>
 
-        <p className="text-[11px] text-slate-400 text-center leading-relaxed">
-          * Account creation is NOT mandatory. You can purchase and download songs directly as a guest at any time.
-        </p>
+        {/* Settings Gear */}
+        <button
+          onClick={() => setShowSettingsModal(true)}
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full transition active:scale-95 ${
+            isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-200'
+          }`}
+          aria-label="Settings"
+        >
+          <Settings className="w-5 h-5 stroke-[2.2px]" />
+        </button>
       </div>
+
+      {/* ===================================================
+          MEMBERSHIP STATUS CARD
+          =================================================== */}
+      <div
+        className={`p-4 rounded-3xl border relative overflow-hidden transition ${
+          isPremiumPlus
+            ? 'bg-gradient-to-r from-amber-600/20 via-orange-600/10 to-[#11151F] border-amber-500/40'
+            : isPremium
+            ? 'bg-gradient-to-r from-[#1455D9]/20 to-[#11151F] border-[#1455D9]/40'
+            : isDark
+            ? 'bg-[#11151F] border-slate-800'
+            : 'bg-white border-[#E5E7EB] shadow-sm'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#F59E0B]">
+                {isPremiumPlus
+                  ? 'Premium Plus'
+                  : isPremium
+                  ? 'Premium'
+                  : 'Free Pass'}
+              </span>
+              {(isPremiumPlus || isPremium) && (
+                <ShieldCheck className="w-4 h-4 text-[#18A558]" />
+              )}
+            </div>
+
+            <p className="text-sm font-bold">
+              {isPremiumPlus
+                ? 'Active until Apr 25, 2026'
+                : isPremium
+                ? 'Active Monthly Subscription'
+                : 'Ad-Supported Free Plan'}
+            </p>
+            <p className="text-xs text-slate-400">
+              {isPremiumPlus
+                ? 'Offline downloads enabled • Highest studio quality'
+                : isPremium
+                ? 'Ad-free listening enabled'
+                : 'Standard audio • Upgradable anytime'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowClaimGiftModal(true)}
+              className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-700 hover:border-slate-600 text-slate-300 transition active:scale-95 flex items-center gap-1.5"
+            >
+              <Gift className="w-3.5 h-3.5 text-rose-400" />
+              <span>Redeem Code</span>
+            </button>
+            <button
+              onClick={() => onNavigate('/pricing')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 shadow-md ${
+                isPremiumPlus
+                  ? 'bg-amber-500 text-black hover:bg-amber-400'
+                  : 'bg-[#E53935] text-white hover:bg-[#d32f2f]'
+              }`}
+            >
+              {isPremiumPlus ? 'Manage' : 'Upgrade'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================================================
+          MENU ROWS (LIBRARY, DOWNLOADS, LIKED, SETTINGS)
+          =================================================== */}
+      <div
+        className={`rounded-3xl border overflow-hidden divide-y ${
+          isDark
+            ? 'bg-[#11151F] border-slate-800 divide-slate-800/80 text-white'
+            : 'bg-white border-[#E5E7EB] divide-slate-100 text-[#111827] shadow-sm'
+        }`}
+      >
+        {menuRows.map((row) => {
+          const Icon = row.icon;
+          return (
+            <div
+              key={row.id}
+              onClick={row.action}
+              className={`p-3.5 flex items-center justify-between cursor-pointer transition select-none active:scale-[0.99] ${
+                isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 stroke-[2px]" />
+                </div>
+                <span className="text-sm font-semibold">{row.label}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {row.count && (
+                  <span className="text-xs text-slate-400 font-medium">
+                    {row.count}
+                  </span>
+                )}
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Admin Dashboard if authenticated or accessible */}
+        {isAdminAuthenticated && (
+          <div
+            onClick={() => onNavigate('/admin')}
+            className={`p-3.5 flex items-center justify-between cursor-pointer transition select-none active:scale-[0.99] ${
+              isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-950/40 text-purple-400 flex items-center justify-center">
+                <Lock className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-semibold text-purple-400">
+                Admin Console
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </div>
+        )}
+
+        {/* Theme Toggle Row */}
+        <div
+          onClick={toggleTheme}
+          className={`p-3.5 flex items-center justify-between cursor-pointer transition select-none active:scale-[0.99] ${
+            isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                isDark ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </div>
+            <span className="text-sm font-semibold">Theme Mode</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[#1455D9]">
+              {isDark ? 'Dark Theme' : 'Light Theme'}
+            </span>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </div>
+        </div>
+
+        {/* WhatsApp Help & Support */}
+        <a
+          href="https://wa.me/265999000000"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`p-3.5 flex items-center justify-between cursor-pointer transition select-none active:scale-[0.99] ${
+            isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                isDark ? 'bg-slate-800 text-emerald-400' : 'bg-slate-100 text-emerald-600'
+              }`}
+            >
+              <HelpCircle className="w-4 h-4" />
+            </div>
+            <span className="text-sm font-semibold">Help & Support (WhatsApp)</span>
+          </div>
+          <ExternalLink className="w-4 h-4 text-slate-400" />
+        </a>
+      </div>
+
+      {/* ===================================================
+          BIG ROUNDED RED ACTION BUTTON: "LOG OUT" (#E53935)
+          =================================================== */}
+      <button
+        onClick={() => {
+          logout();
+          showToast('Logged out successfully', 'info');
+        }}
+        className="w-full py-3.5 rounded-2xl bg-[#E53935] hover:bg-[#d32f2f] active:scale-[0.99] text-white font-bold text-sm transition shadow-lg shadow-red-950/40 flex items-center justify-center gap-2"
+      >
+        <LogOut className="w-4 h-4 stroke-[2.2px]" />
+        <span>Log Out</span>
+      </button>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl border text-left space-y-4 animate-in fade-in zoom-in-95 ${
+              isDark ? 'bg-[#11151F] border-slate-800 text-white' : 'bg-white border-[#E5E7EB] text-[#111827]'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold">App Settings</h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h4 className="text-xs font-bold">Streaming Quality</h4>
+                  <p className="text-[11px] text-slate-400">
+                    {isPremiumPlus ? 'Master High (320kbps)' : 'Standard (160kbps)'}
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-[#1455D9]">
+                  {isPremiumPlus ? 'Auto HD' : 'Standard'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h4 className="text-xs font-bold">Data Saver</h4>
+                  <p className="text-[11px] text-slate-400">Reduces cellular data on mobile</p>
+                </div>
+                <input type="checkbox" defaultChecked className="toggle rounded accent-[#1455D9]" />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="w-full py-2.5 rounded-xl bg-[#1455D9] text-white text-xs font-bold"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gift Subscription Modal */}
+      {showGiftModal && (
+        <GiftSubscriptionModal
+          isOpen={showGiftModal}
+          onClose={() => setShowGiftModal(false)}
+          onSuccess={(gift) => {
+            showToast(`Gift code "${gift.claimCode}" generated! Share with your friend.`, 'success');
+          }}
+        />
+      )}
+
+      {/* Claim Gift Modal */}
+      {showClaimGiftModal && (
+        <ClaimGiftModal
+          isOpen={showClaimGiftModal}
+          onClose={() => setShowClaimGiftModal(false)}
+          onSuccess={(gift) => {
+            showToast(`Awesome! ${gift.durationMonths} months of ${gift.tier.replace('_', ' ')} activated!`, 'success');
+          }}
+        />
+      )}
+
+      {/* Family Plan Modal */}
+      {showFamilyModal && (
+        <FamilyPlanModal
+          isOpen={showFamilyModal}
+          onClose={() => setShowFamilyModal(false)}
+        />
+      )}
+
     </div>
   );
 };

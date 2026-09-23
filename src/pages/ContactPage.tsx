@@ -54,10 +54,10 @@ export const ContactPage: React.FC = () => {
           <span>Projects Mandatory Support & Inquiries</span>
         </div>
         <h1 className="text-2xl sm:text-4xl font-extrabold text-white font-['Syne',sans-serif]">
-          Contact Projects Mandatory & Hapsin
+          Contact Projects Mandatory
         </h1>
         <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-xl">
-          Get in touch directly through WhatsApp or send a message right here on the website for bookings, promotion inquiries, or download support.
+          Get in touch directly through WhatsApp or send a message right here on the website for artist support, distribution inquiries, or customer assistance.
         </p>
       </div>
 
@@ -83,7 +83,7 @@ export const ContactPage: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Chat directly with Hapsin & the Projects Mandatory management team on WhatsApp.
+              Chat directly with the Projects Mandatory artist and support management team on WhatsApp.
             </p>
 
             <div className="p-3 rounded-xl bg-slate-950/80 border border-emerald-900/60 text-center">
@@ -222,7 +222,7 @@ export const ContactPage: React.FC = () => {
                   rows={4}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Write what you need help with, booking details, or questions for Hapsin..."
+                  placeholder="Write what you need help with, music inquiries, distribution, or artist support..."
                   className="w-full rounded-lg bg-slate-950 border border-slate-700/80 text-slate-100 text-sm placeholder-slate-500 p-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500 transition"
                   required
                 />

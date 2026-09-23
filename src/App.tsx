@@ -5,12 +5,20 @@ import {
   subscribePublishedSongs,
   subscribeArtistSettings,
 } from './lib/firebase';
+import { INITIAL_SONGS } from './data/initialData';
 import { AuthProvider } from './context/AuthContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { ArtistProvider } from './context/ArtistContext';
 import { ToastProvider, useToast } from './context/ToastContext';
-import { Header } from './components/common/Header';
-import { Footer } from './components/common/Footer';
+import { SubscriptionProvider } from './context/SubscriptionContext';
+import { PlaybackProvider, usePlayback } from './context/PlaybackContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
+
+// Navigation & Player Components
+import { TopAppBar } from './components/navigation/TopAppBar';
+import { BottomNavigation } from './components/navigation/BottomNavigation';
+import { MiniPlayer } from './components/player/MiniPlayer';
+import { NowPlayingModal } from './components/player/NowPlayingModal';
 import { OfflineIndicator } from './components/common/OfflineIndicator';
 import { SongGridSkeleton } from './components/common/LoadingSkeleton';
 import { ErrorState } from './components/common/EmptyState';
@@ -18,6 +26,8 @@ import { ErrorState } from './components/common/EmptyState';
 // Pages
 import { HomePage } from './pages/HomePage';
 import { MusicPage } from './pages/MusicPage';
+import { SearchPage } from './pages/SearchPage';
+import { LibraryPage } from './pages/LibraryPage';
 import { SongDetailPage } from './pages/SongDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { PaymentStatusPage } from './pages/PaymentStatusPage';
@@ -33,21 +43,23 @@ import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { ArtistStudioPage } from './pages/artist/ArtistStudioPage';
 import { ArtistsListPage } from './pages/artist/ArtistsListPage';
 import { ArtistProfilePage } from './pages/artist/ArtistProfilePage';
+import { PricingPlansPage } from './components/monetization/PricingPlansPage';
 
 function AppContent() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<Song[]>(INITIAL_SONGS);
   const [artistSettings, setArtistSettings] = useState<Partial<ArtistSettings>>({});
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedSongForCheckout, setSelectedSongForCheckout] = useState<Song | null>(null);
   const [activeTxRef, setActiveTxRef] = useState<string | null>(null);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [completedPurchaseToken, setCompletedPurchaseToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const { isAdminAuthenticated } = useAdmin();
-  const { showToast } = useToast();
+  const { isDark } = useTheme();
+  const { playSong } = usePlayback();
 
   // Handle URL synchronizing
   const navigate = (path: string) => {
@@ -66,35 +78,28 @@ function AppContent() {
 
   // Real-time Firestore synchronizer
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-
     // Subscribe to published songs in real-time
     const unsubscribeSongs = subscribePublishedSongs(
       (realtimeSongs) => {
         if (realtimeSongs && realtimeSongs.length > 0) {
-          setSongs(realtimeSongs);
-          setIsLoading(false);
+          // Merge with initial catalog to ensure rich presentation
+          const existingIds = new Set(realtimeSongs.map((s) => s.id));
+          const merged = [...realtimeSongs, ...INITIAL_SONGS.filter((s) => !existingIds.has(s.id))];
+          setSongs(merged);
         } else {
-          api.getSongs().then((apiSongs) => {
-            if (apiSongs.length > 0) {
-              setSongs(apiSongs);
-            }
-            setIsLoading(false);
-          }).catch(() => {
-            setIsLoading(false);
-          });
+          api
+            .getSongs()
+            .then((apiSongs) => {
+              if (apiSongs.length > 0) {
+                const existingIds = new Set(apiSongs.map((s) => s.id));
+                setSongs([...apiSongs, ...INITIAL_SONGS.filter((s) => !existingIds.has(s.id))]);
+              }
+            })
+            .catch(() => {});
         }
       },
       (err) => {
         console.warn('Real-time sync notice:', err.message);
-        api.getSongs().then((fallbackSongs) => {
-          setSongs(fallbackSongs);
-          setIsLoading(false);
-        }).catch((apiErr) => {
-          setError(apiErr.message || 'Could not load song catalog');
-          setIsLoading(false);
-        });
       }
     );
 
@@ -119,7 +124,10 @@ function AppContent() {
 
   const handleSelectSong = (songId: string) => {
     setSelectedSongId(songId);
-    navigate(`/song/${songId}`);
+    const found = songs.find((s) => s.id === songId);
+    if (found) {
+      playSong(found, songs);
+    }
   };
 
   const handlePaymentInitiated = (txRef: string) => {
@@ -156,12 +164,26 @@ function AppContent() {
     return null;
   };
 
+  const isDeepRoute =
+    currentPath.startsWith('/song/') ||
+    currentPath.startsWith('/checkout/') ||
+    currentPath.startsWith('/payment/') ||
+    currentPath.startsWith('/download/') ||
+    currentPath.startsWith('/artist/') ||
+    currentPath === '/pricing' ||
+    currentPath === '/plans' ||
+    currentPath === '/about' ||
+    currentPath === '/contact' ||
+    currentPath === '/privacy' ||
+    currentPath === '/terms' ||
+    currentPath === '/promote';
+
   const renderCurrentView = () => {
     if (isLoading && songs.length === 0) {
       return (
-        <div className="py-12 max-w-5xl mx-auto space-y-6">
-          <div className="h-48 rounded-3xl bg-slate-900/60 animate-pulse"></div>
-          <SongGridSkeleton count={6} />
+        <div className="py-6 space-y-4">
+          <div className="h-40 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          <SongGridSkeleton count={4} />
         </div>
       );
     }
@@ -179,7 +201,7 @@ function AppContent() {
     }
 
     // Admin Dashboard Route
-    if (currentPath === '/admin/dashboard') {
+    if (currentPath === '/admin/dashboard' || currentPath === '/admin') {
       if (!isAdminAuthenticated) {
         return (
           <AdminLoginPage
@@ -233,14 +255,60 @@ function AppContent() {
         <ArtistProfilePage
           artistId={routeArtistId}
           songs={songs}
-          onBack={() => navigate('/artists')}
-          onBuy={handleBuy}
           onSelectSong={handleSelectSong}
+          onNavigate={navigate}
         />
       );
     }
 
-    // Promote Music / Artist Submissions Route
+    // Dedicated Search Route
+    if (currentPath.startsWith('/search')) {
+      return (
+        <SearchPage
+          songs={songs}
+          onSelectSong={handleSelectSong}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    // Dedicated Library Route
+    if (currentPath.startsWith('/library')) {
+      return (
+        <LibraryPage
+          songs={songs}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    // Dedicated Profile / Account Route
+    if (currentPath === '/profile' || currentPath === '/account') {
+      return <AccountPage onNavigate={navigate} />;
+    }
+
+    // Dedicated Music Route
+    if (currentPath === '/music') {
+      return (
+        <MusicPage
+          songs={songs}
+          onSelectSong={handleSelectSong}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    // Subscription & Pricing Plans Route
+    if (currentPath === '/pricing' || currentPath === '/plans') {
+      return (
+        <PricingPlansPage
+          onNavigate={navigate}
+          onBack={() => navigate('/')}
+        />
+      );
+    }
+
+    // Promote Music Route
     if (currentPath === '/promote') {
       return (
         <PromoteMusicPage
@@ -256,11 +324,13 @@ function AppContent() {
       if (!song) {
         return (
           <div className="py-12 text-center">
-            <h2 className="text-xl font-bold text-white mb-2">Song Not Found</h2>
-            <p className="text-xs text-slate-400 mb-4">The track you are looking for does not exist or has been removed.</p>
+            <h2 className="text-xl font-bold mb-2">Song Not Found</h2>
+            <p className="text-xs text-slate-400 mb-4">
+              The track you are looking for does not exist or has been removed.
+            </p>
             <button
               onClick={() => navigate('/music')}
-              className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-semibold"
+              className="px-4 py-2 bg-[#1455D9] text-white rounded-xl text-xs font-semibold"
             >
               Browse Music
             </button>
@@ -282,11 +352,13 @@ function AppContent() {
       if (!song) {
         return (
           <div className="py-12 text-center">
-            <h2 className="text-xl font-bold text-white mb-2">Checkout Session Expired</h2>
-            <p className="text-xs text-slate-400 mb-4">Please select a song from the music catalog to proceed.</p>
+            <h2 className="text-xl font-bold mb-2">Checkout Session Expired</h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Please select a song from the music catalog to proceed.
+            </p>
             <button
               onClick={() => navigate('/music')}
-              className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-semibold"
+              className="px-4 py-2 bg-[#1455D9] text-white rounded-xl text-xs font-semibold"
             >
               Select Song
             </button>
@@ -308,8 +380,11 @@ function AppContent() {
       if (!txRef) {
         return (
           <div className="py-12 text-center">
-            <h2 className="text-xl font-bold text-white mb-2">No Transaction Reference</h2>
-            <button onClick={() => navigate('/music')} className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs">
+            <h2 className="text-xl font-bold mb-2">No Transaction Reference</h2>
+            <button
+              onClick={() => navigate('/music')}
+              className="px-4 py-2 bg-[#1455D9] text-white rounded-xl text-xs"
+            >
               Go to Music
             </button>
           </div>
@@ -344,12 +419,10 @@ function AppContent() {
       );
     }
 
-    // Other Standard Pages
-    if (currentPath === '/music') {
+    if (currentPath === '/purchases') {
       return (
-        <MusicPage
-          songs={songs}
-          onBuy={handleBuy}
+        <MyPurchasesPage
+          onExploreMusic={() => navigate('/music')}
           onSelectSong={handleSelectSong}
         />
       );
@@ -368,19 +441,6 @@ function AppContent() {
       return <ContactPage />;
     }
 
-    if (currentPath === '/account') {
-      return <AccountPage onNavigate={navigate} />;
-    }
-
-    if (currentPath === '/purchases') {
-      return (
-        <MyPurchasesPage
-          onExploreMusic={() => navigate('/music')}
-          onSelectSong={handleSelectSong}
-        />
-      );
-    }
-
     if (currentPath === '/privacy') {
       return <PrivacyPage onBack={() => navigate('/')} />;
     }
@@ -389,7 +449,7 @@ function AppContent() {
       return <TermsPage onBack={() => navigate('/')} />;
     }
 
-    // Default Home Page
+    // Default: Home Page
     return (
       <HomePage
         songs={songs}
@@ -402,29 +462,63 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-rose-500/30 selection:text-rose-200">
-      <Header currentPath={currentPath} onNavigate={navigate} />
+    <div
+      className={`min-h-screen transition-colors duration-200 font-['Inter','Plus_Jakarta_Sans',sans-serif] ${
+        isDark
+          ? 'bg-[#080B12] text-[#F5F7FA] selection:bg-[#1455D9]/30 selection:text-white'
+          : 'bg-[#F7F8FA] text-[#111827] selection:bg-[#1455D9]/20 selection:text-[#1455D9]'
+      }`}
+    >
+      {/* Mobile-First Frame container: Full width on phone, neatly centered on tablet/desktop */}
+      <div className="max-w-md sm:max-w-xl md:max-w-2xl mx-auto min-h-screen flex flex-col relative shadow-2xl">
+        
+        {/* Top App Bar */}
+        <TopAppBar
+          currentPath={currentPath}
+          onNavigate={navigate}
+          showBack={isDeepRoute}
+        />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-        {renderCurrentView()}
-      </main>
+        {/* Scrollable Main Content */}
+        <main className="flex-1 px-4 pt-3 pb-36">
+          {renderCurrentView()}
+        </main>
 
-      <Footer onNavigate={navigate} />
-      <OfflineIndicator />
+        {/* Persistent Mini-Player (sits right above bottom navigation) */}
+        <MiniPlayer />
+
+        {/* 5-Item Bottom Navigation */}
+        <BottomNavigation
+          currentPath={currentPath}
+          onNavigate={navigate}
+        />
+
+        {/* Full-Screen Dark Immersive Now Playing Modal */}
+        <NowPlayingModal onNavigate={navigate} />
+
+        {/* Offline Status */}
+        <OfflineIndicator />
+      </div>
     </div>
   );
 }
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AdminProvider>
-          <ArtistProvider>
-            <AppContent />
-          </ArtistProvider>
-        </AdminProvider>
-      </AuthProvider>
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AdminProvider>
+            <ArtistProvider>
+              <SubscriptionProvider>
+                <PlaybackProvider>
+                  <AppContent />
+                </PlaybackProvider>
+              </SubscriptionProvider>
+            </ArtistProvider>
+          </AdminProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

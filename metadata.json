@@ -1,6 +1,6 @@
 {
   "name": "Projects Mandatory",
-  "description": "Official digital music storefront & artist promotion platform Projects Mandatory featuring artist Hapsin. Direct studio master downloads, independent artist promotion, and mobile money checkout.",
+  "description": "African digital music storefront & independent artist network. Direct uncompressed studio master downloads, 70% direct artist payouts, and Share & Boost invite tracking.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

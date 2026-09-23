@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Music, Menu, X, User, ShieldCheck, ShoppingBag, Disc, Sparkles, MessageCircle, Mic2, Users } from 'lucide-react';
+import { Music, Menu, X, User, ShieldCheck, ShoppingBag, Disc, Sparkles, MessageCircle, Mic2, Users, ArrowRightLeft, Headphones, Crown } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAdmin } from '../../context/AdminContext';
 import { useArtist } from '../../context/ArtistContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { isAuthorizedAdmin, OFFICIAL_WHATSAPP_LINK } from '../../lib/firebase';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -13,25 +14,38 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, activeRole, switchRole } = useAuth();
   const { isAdminAuthenticated } = useAdmin();
-  const { isArtist, artistProfile } = useArtist();
+  const { isArtist } = useArtist();
+  const { currentTier } = useSubscription();
 
   const isUserAdmin = isAdminAuthenticated || (user?.email && isAuthorizedAdmin(user.email));
 
   const navLinks = [
     { label: 'Home', path: '/' },
     { label: 'Music Store', path: '/music' },
+    { label: 'Plans & Pricing', path: '/pricing', highlightPlan: true },
     { label: 'Artists', path: '/artists' },
     { label: 'Artist Studio', path: '/artist/studio', highlight: true },
-    { label: 'About Hapsin', path: '/about' },
+    { label: 'About', path: '/about' },
     { label: 'Contact', path: '/contact' },
     { label: 'My Purchases', path: '/purchases' },
   ];
 
+
   const handleNavClick = (path: string) => {
     setIsMobileMenuOpen(false);
     onNavigate(path);
+  };
+
+  const handleRoleToggle = () => {
+    const nextRole = activeRole === 'artist' ? 'user' : 'artist';
+    switchRole(nextRole);
+    if (nextRole === 'artist') {
+      onNavigate('/artist/studio');
+    } else {
+      onNavigate('/music');
+    }
   };
 
   return (
@@ -55,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                 PROJECTS <span className="text-rose-500">MANDATORY</span>
               </span>
               <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase block mt-0.5">
-                Music Platform • Featuring Hapsin
+                African Music Storefront & Artist Hub
               </span>
             </div>
           </button>
@@ -85,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
           {/* Right Header Actions */}
           <div className="hidden sm:flex items-center gap-2.5">
-            {/* WhatsApp direct chat link (no auto-filled message) */}
+            {/* WhatsApp direct chat link */}
             <a
               href={OFFICIAL_WHATSAPP_LINK}
               target="_blank"
@@ -98,6 +112,22 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             </a>
 
             <PWAInstallButton variant="nav" />
+
+            {/* Role Switcher Button (Allows switching between Fan Mode & Artist Mode) */}
+            {isAuthenticated && (
+              <button
+                onClick={handleRoleToggle}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                  activeRole === 'artist'
+                    ? 'bg-amber-950/60 text-amber-300 border-amber-700/80 hover:bg-amber-900/60'
+                    : 'bg-indigo-950/60 text-indigo-300 border-indigo-700/80 hover:bg-indigo-900/60'
+                }`}
+                title={`Currently in ${activeRole === 'artist' ? 'Artist Mode' : 'Fan Mode'} - Click to switch`}
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                <span>{activeRole === 'artist' ? 'Artist Mode' : 'Fan Mode'}</span>
+              </button>
+            )}
 
             {/* Admin shortcut if logged in */}
             {isUserAdmin ? (
@@ -132,7 +162,24 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
               <span>{isAuthenticated ? (user?.name || 'Account') : 'Sign In'}</span>
             </button>
 
+            {/* Plan Tier Badge Button */}
+            <button
+              onClick={() => handleNavClick('/pricing')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition ${
+                currentTier === 'PREMIUM_PLUS'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                  : currentTier === 'PREMIUM'
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 hover:bg-rose-500/30'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+              }`}
+              title="Click to view subscription plans & perks"
+            >
+              <Crown className={`w-3.5 h-3.5 ${currentTier !== 'FREE' ? 'text-amber-400' : 'text-slate-500'}`} />
+              <span>{currentTier === 'PREMIUM_PLUS' ? 'Plus' : currentTier === 'PREMIUM' ? 'Premium' : 'Free Pass'}</span>
+            </button>
+
             {/* Artist Studio CTA */}
+
             <button
               onClick={() => handleNavClick('/artist/studio')}
               className="min-h-[40px] px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-md shadow-rose-950/40 border border-rose-500/40 transition active:scale-[0.98] flex items-center gap-1.5"
@@ -144,6 +191,16 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
           {/* Mobile Hamburger Toggle */}
           <div className="flex sm:hidden items-center gap-2">
+            {isAuthenticated && (
+              <button
+                onClick={handleRoleToggle}
+                className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-amber-300 font-mono"
+                title="Toggle Mode"
+              >
+                {activeRole === 'artist' ? '🎨' : '🎧'}
+              </button>
+            )}
+
             <a
               href={OFFICIAL_WHATSAPP_LINK}
               target="_blank"
@@ -170,6 +227,27 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
       {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
         <div className="sm:hidden bg-slate-950/98 border-b border-slate-800 px-4 pt-3 pb-6 animate-in slide-in-from-top-2">
+          {/* Mobile Account Role Switcher */}
+          {isAuthenticated && (
+            <div className="mb-3 p-3 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-white block">
+                  Current View: {activeRole === 'artist' ? 'Artist / Creator Studio' : 'Fan / Music Listener'}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Logged in as {user?.email}
+                </span>
+              </div>
+              <button
+                onClick={handleRoleToggle}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1"
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                <span>Switch to {activeRole === 'artist' ? 'Fan' : 'Artist'}</span>
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5 mb-4">
             {navLinks.map((link) => {
               const isActive = currentPath === link.path;

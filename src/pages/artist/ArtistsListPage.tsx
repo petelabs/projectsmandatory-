@@ -18,22 +18,22 @@ export const ArtistsListPage: React.FC<ArtistsListPageProps> = ({
 
   useEffect(() => {
     const unsubscribe = subscribeAllArtists((list) => {
-      // If empty, ensure Hapsin is included as default featured artist
+      // If empty, ensure default verified creators are included
       if (list.length === 0) {
         setArtists([
           {
-            id: 'hapsin-official',
-            userId: 'hapsin-official',
-            artistName: 'Hapsin',
-            email: 'hapsin@projectsmandatory.com',
+            id: 'jay-vibes',
+            userId: 'jay-vibes',
+            artistName: 'Jay Vibes',
+            email: 'jayvibes@projectsmandatory.com',
             phone: '0984 67 96 91',
-            bio: 'Official flagship recording artist on Projects Mandatory. African contemporary afro-fusion & urban hits.',
+            bio: 'Independent recording artist on Projects Mandatory. African contemporary afro-fusion & urban hits.',
             genres: ['Afro-fusion', 'Urban Pop'],
             avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop',
             payoutDetails: {
               accountType: 'AIRTEL_MONEY',
               accountNumber: '0984 67 96 91',
-              accountName: 'Hapsin Music',
+              accountName: 'Jay Vibes Music',
             },
             wallet: {
               totalEarnedMWK: 0,
