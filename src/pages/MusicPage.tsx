@@ -10,12 +10,14 @@ import {
   Share2,
   User,
   Disc,
+  PlaySquare,
 } from 'lucide-react';
 import { Song } from '../types';
 import { usePlayback } from '../context/PlaybackContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
+import { SongActionMenuModal } from '../components/common/SongActionMenuModal';
 
 interface MusicPageProps {
   songs: Song[];
@@ -32,6 +34,8 @@ export const MusicPage: React.FC<MusicPageProps> = ({
     currentSong,
     isPlaying,
     playSong,
+    playNext,
+    addToQueue,
     isLiked,
     toggleLikeSong,
     offlineSongs,
@@ -44,7 +48,7 @@ export const MusicPage: React.FC<MusicPageProps> = ({
   const [activeTab, setActiveTab] = useState<'new' | 'all'>('new');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('ALL');
-  const [activeMenuSongId, setActiveMenuSongId] = useState<string | null>(null);
+  const [selectedActionSong, setSelectedActionSong] = useState<Song | null>(null);
 
   // Genres list
   const genres = useMemo(() => {
@@ -87,129 +91,120 @@ export const MusicPage: React.FC<MusicPageProps> = ({
     return result;
   }, [songs, activeTab, selectedGenre, searchQuery]);
 
-  const handleDownload = async (song: Song) => {
-    if (!canDownloadOffline) {
-      showToast('Offline downloads require Premium Plus plan', 'info');
-      onNavigate('/pricing');
-      return;
-    }
-    const success = await downloadForOffline(song);
-    if (success) {
-      showToast(`Downloaded "${song.title}" for offline playback`, 'success');
-    }
-  };
-
-  const handleShare = async (song: Song) => {
-    const shareUrl = `${window.location.origin}/song/${song.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: song.title,
-          text: `Check out ${song.title} by ${song.artist} on Projects Mandatory`,
-          url: shareUrl,
-        });
-      } catch {}
-    } else {
-      await navigator.clipboard.writeText(shareUrl);
-      showToast('Song link copied to clipboard!', 'success');
-    }
-  };
-
   return (
-    <div className="space-y-4 pb-6 text-left">
-      
-      {/* Title */}
-      <div className="pt-1">
-        <h1
-          className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
-            isDark ? 'text-white' : 'text-[#111827]'
-          }`}
-        >
-          Music
-        </h1>
-      </div>
+    <>
+      <div className="space-y-4 pb-6 text-left">
+        {/* Title */}
+        <div className="pt-1">
+          <h1
+            className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
+              isDark ? 'text-white' : 'text-[#111827]'
+            }`}
+          >
+            Discover Music
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Stream popular hits, new releases, and authentic Malawian sounds
+          </p>
+        </div>
 
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search music..."
-          className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm outline-none border transition ${
+        {/* Search Bar Input */}
+        <div
+          className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border transition ${
             isDark
-              ? 'bg-[#11151F] border-slate-800 text-white placeholder-slate-500 focus:border-[#1455D9]'
-              : 'bg-white border-[#E5E7EB] text-[#111827] placeholder-slate-400 focus:border-[#1455D9] shadow-sm'
-          }`}
-        />
-      </div>
-
-      {/* Two Simple Controls: "New Releases" | "All Music" */}
-      <div className="p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-1">
-        <button
-          onClick={() => setActiveTab('new')}
-          className={`py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
-            activeTab === 'new'
-              ? 'bg-[#1455D9] text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+              ? 'bg-[#11151F] border-slate-800 text-white focus-within:border-[#1455D9]'
+              : 'bg-white border-[#E5E7EB] text-[#111827] focus-within:border-[#1455D9] shadow-sm'
           }`}
         >
-          New Releases
-        </button>
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
-            activeTab === 'all'
-              ? 'bg-[#1455D9] text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
-          }`}
-        >
-          All Music
-        </button>
-      </div>
+          <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Search tracks, artists, or genres..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent text-xs sm:text-sm focus:outline-none placeholder:text-slate-400"
+          />
+        </div>
 
-      {/* Genre Filter Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-        {genres.map((g) => (
-          <button
-            key={g}
-            onClick={() => setSelectedGenre(g)}
-            className={`min-h-[34px] px-3.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
-              selectedGenre === g
-                ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] font-bold'
-                : isDark
-                ? 'bg-[#11151F] text-slate-400 border border-slate-800'
-                : 'bg-white text-slate-600 border border-[#E5E7EB]'
-            }`}
-          >
-            {g === 'ALL' ? 'All Genres' : g}
-          </button>
-        ))}
-      </div>
-
-      {/* Music List */}
-      <div className="space-y-1.5 pt-1">
-        {filteredSongs.length === 0 ? (
-          <div
-            className={`p-10 rounded-2xl text-center border ${
-              isDark ? 'bg-[#11151F] border-slate-800' : 'bg-white border-[#E5E7EB]'
-            }`}
-          >
-            <Disc className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-50" />
-            <h3 className="text-base font-bold">No songs found</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Try searching with another keyword or selecting All Genres.
-            </p>
+        {/* Tab & Genre Filters */}
+        <div className="space-y-2">
+          {/* Main Segmented Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('new')}
+              className={`min-h-[36px] px-4 py-1.5 rounded-full text-xs font-bold transition active:scale-95 ${
+                activeTab === 'new'
+                  ? 'bg-[#1455D9] text-white shadow-sm'
+                  : isDark
+                  ? 'bg-[#11151F] text-slate-400 border border-slate-800'
+                  : 'bg-white text-slate-600 border border-[#E5E7EB]'
+              }`}
+            >
+              New Releases
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`min-h-[36px] px-4 py-1.5 rounded-full text-xs font-bold transition active:scale-95 ${
+                activeTab === 'all'
+                  ? 'bg-[#1455D9] text-white shadow-sm'
+                  : isDark
+                  ? 'bg-[#11151F] text-slate-400 border border-slate-800'
+                  : 'bg-white text-slate-600 border border-[#E5E7EB]'
+              }`}
+            >
+              Top Charts
+            </button>
           </div>
-        ) : (
-          filteredSongs.map((song) => {
-            const isThisPlaying = currentSong?.id === song.id && isPlaying;
-            const isMenuOpen = activeMenuSongId === song.id;
 
-            return (
-              <div key={song.id} className="relative">
+          {/* Genre Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            {genres.map((g) => {
+              const isSelected = selectedGenre === g;
+              return (
+                <button
+                  key={g}
+                  onClick={() => setSelectedGenre(g)}
+                  className={`min-h-[32px] px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition active:scale-95 ${
+                    isSelected
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-black font-bold'
+                      : isDark
+                      ? 'bg-[#11151F] text-slate-400 border border-slate-800'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {g}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Track Count Bar */}
+        <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+          <span>Showing {filteredSongs.length} tracks</span>
+        </div>
+
+        {/* Song List */}
+        <div className="space-y-1.5">
+          {filteredSongs.length === 0 ? (
+            <div
+              className={`p-10 rounded-2xl text-center border ${
+                isDark ? 'bg-[#11151F] border-slate-800' : 'bg-white border-[#E5E7EB]'
+              }`}
+            >
+              <Disc className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-40" />
+              <h3 className="text-base font-bold">No songs found</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Try searching with another keyword or selecting All Genres.
+              </p>
+            </div>
+          ) : (
+            filteredSongs.map((song) => {
+              const isThisPlaying = currentSong?.id === song.id && isPlaying;
+
+              return (
                 <div
+                  key={song.id}
                   onClick={() => playSong(song, filteredSongs)}
                   className={`p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition select-none active:scale-[0.99] border ${
                     isThisPlaying
@@ -263,15 +258,15 @@ export const MusicPage: React.FC<MusicPageProps> = ({
                   {/* Right: Duration & Three-Dot Menu */}
                   <div
                     className="flex items-center gap-2 flex-shrink-0"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedActionSong(song);
+                    }}
                   >
                     <span className="text-xs text-slate-400 font-mono hidden sm:inline">
                       {song.duration || '3:30'}
                     </span>
                     <button
-                      onClick={() =>
-                        setActiveMenuSongId(isMenuOpen ? null : song.id)
-                      }
                       className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full transition active:scale-95 ${
                         isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-black'
                       }`}
@@ -281,83 +276,19 @@ export const MusicPage: React.FC<MusicPageProps> = ({
                     </button>
                   </div>
                 </div>
-
-                {/* Popover Options Menu */}
-                {isMenuOpen && (
-                  <div
-                    className={`absolute right-2 top-14 w-52 rounded-2xl p-1.5 shadow-2xl border z-30 text-left ${
-                      isDark ? 'bg-[#11151F] border-slate-700 text-white' : 'bg-white border-[#E5E7EB] text-[#111827]'
-                    }`}
-                  >
-                    <button
-                      onClick={() => {
-                        setActiveMenuSongId(null);
-                        showToast(`Added "${song.title}" to playlist`, 'success');
-                      }}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <ListPlus className="w-4 h-4 text-slate-400" />
-                      <span>Add to playlist</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        toggleLikeSong(song.id);
-                        setActiveMenuSongId(null);
-                      }}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${
-                          isLiked(song.id) ? 'text-[#E53935] fill-current' : 'text-slate-400'
-                        }`}
-                      />
-                      <span>{isLiked(song.id) ? 'Liked' : 'Like'}</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveMenuSongId(null);
-                        handleShare(song);
-                      }}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4 text-slate-400" />
-                      <span>Share</span>
-                    </button>
-
-                    {/* Only show Download to eligible users or upgrade prompt */}
-                    <button
-                      onClick={() => {
-                        setActiveMenuSongId(null);
-                        handleDownload(song);
-                      }}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4 text-[#18A558]" />
-                      <span>
-                        {canDownloadOffline ? 'Download Offline' : 'Download (Plus)'}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveMenuSongId(null);
-                        const artistId = song.artistId || 'artist-bwalya';
-                        onNavigate(`/artist/${artistId}`);
-                      }}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <User className="w-4 h-4 text-slate-400" />
-                      <span>View Artist</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Reusable Song Action Menu Modal */}
+      <SongActionMenuModal
+        song={selectedActionSong}
+        isOpen={!!selectedActionSong}
+        onClose={() => setSelectedActionSong(null)}
+        onNavigate={onNavigate}
+      />
+    </>
   );
 };

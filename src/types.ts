@@ -12,6 +12,8 @@ export interface Song {
   title: string;
   artist: string;
   artistId?: string; // Links to ArtistProfile.id / userId
+  albumId?: string;
+  albumTitle?: string;
   featuredArtists?: string;
   producer?: string;
   genre: string;
@@ -37,8 +39,82 @@ export interface Song {
   boostClicks?: number; // Unique Share & Boost referral clicks
   boostPurchases?: number; // Purchases originating from boost referrals
   tags?: string[];
+  moods?: string[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface Album {
+  id: string;
+  title: string;
+  artist: string;
+  artistId: string;
+  coverImage: string;
+  genre: string;
+  releaseDate: string;
+  type: 'ALBUM' | 'EP' | 'SINGLE';
+  description: string;
+  songIds: string[];
+  songs?: Song[];
+  priceMWK?: number;
+  totalDuration?: string;
+  isFeatured?: boolean;
+  isNew?: boolean;
+  playCount?: number;
+  createdAt: string;
+}
+
+export interface Playlist {
+  id: string;
+  title: string;
+  description: string;
+  coverImage: string;
+  curator: string;
+  genre?: string;
+  mood?: string;
+  isEditorial: boolean;
+  isMalawiSpecial?: boolean;
+  isPublic?: boolean;
+  ownerId?: string;
+  ownerEmail?: string;
+  songIds: string[];
+  songs?: Song[];
+  playCount?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type DownloadQuality = '128kbps' | '320kbps' | 'lossless';
+
+export interface DownloadRecord {
+  id: string;
+  songId: string;
+  songTitle: string;
+  artist: string;
+  artistId?: string;
+  coverImage: string;
+  fileSize: string;
+  duration?: string;
+  quality: DownloadQuality;
+  downloadedAt: string;
+  status: 'downloading' | 'completed' | 'paused' | 'failed';
+  progress: number; // 0 - 100
+  cachedAudioUrl?: string;
+}
+
+export interface SavedAlbumRecord {
+  id: string;
+  albumId: string;
+  userId: string;
+  savedAt: string;
+}
+
+export interface FollowedArtistRecord {
+  id: string;
+  artistId: string;
+  artistName: string;
+  userId: string;
+  followedAt: string;
 }
 
 export interface ArtistNotification {

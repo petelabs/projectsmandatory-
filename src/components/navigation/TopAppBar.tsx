@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Bell, ArrowLeft, Moon, Sun, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useNotifications } from '../../context/NotificationContext';
+import { NotificationCenterModal } from './NotificationCenterModal';
 
 interface TopAppBarProps {
   currentPath: string;
@@ -16,24 +18,10 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   title,
   showBack = false,
 }) => {
-  const { user, isAuthenticated } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
-  const [showNotifications, setShowNotifications] = useState(false);
-
-  const notifications = [
-    {
-      id: '1',
-      title: 'New Release from Bwalya Musik',
-      time: '1h ago',
-      read: false,
-    },
-    {
-      id: '2',
-      title: 'Royalty Pool Distribution Updated',
-      time: '1d ago',
-      read: true,
-    },
-  ];
+  const { user } = useAuth();
+  const { toggleTheme, isDark } = useTheme();
+  const { unreadCount } = useNotifications();
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
 
   return (
     <header
@@ -105,44 +93,19 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           {/* Notifications Bell */}
           <div className="relative">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
+              onClick={() => setShowNotificationCenter(true)}
               className={`min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full relative transition active:scale-95 ${
                 isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-200'
               }`}
               aria-label="View notifications"
             >
               <Bell className="w-5 h-5 stroke-[1.8px]" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#E53935] ring-2 ring-white dark:ring-[#080B12]" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#E53935] text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-white dark:ring-[#080B12]">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
-
-            {/* Notification Dropdown */}
-            {showNotifications && (
-              <div
-                className={`absolute right-0 top-12 w-72 rounded-2xl p-3 shadow-xl border z-50 animate-in fade-in zoom-in-95 ${
-                  isDark ? 'bg-[#11151F] border-slate-800 text-white' : 'bg-white border-[#E5E7EB] text-[#111827]'
-                }`}
-              >
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Notifications
-                  </span>
-                  <span className="text-[10px] text-[#1455D9] font-semibold">Mark read</span>
-                </div>
-                <div className="space-y-2">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className={`p-2 rounded-xl text-left transition ${
-                        isDark ? 'hover:bg-slate-800/60' : 'hover:bg-slate-100'
-                      }`}
-                    >
-                      <p className="text-xs font-medium leading-snug">{n.title}</p>
-                      <span className="text-[10px] text-slate-400">{n.time}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Profile Shortcut Avatar */}
@@ -166,6 +129,14 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Notification Center Modal */}
+      <NotificationCenterModal
+        isOpen={showNotificationCenter}
+        onClose={() => setShowNotificationCenter(false)}
+        onNavigate={onNavigate}
+      />
     </header>
   );
 };
+

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Song, Order, ArtistSettings } from './types';
+import { Song, Order, ArtistSettings, Album, Playlist } from './types';
 import { api } from './lib/api';
 import {
   subscribePublishedSongs,
   subscribeArtistSettings,
 } from './lib/firebase';
-import { INITIAL_SONGS } from './data/initialData';
+import { INITIAL_SONGS, INITIAL_ALBUMS, INITIAL_PLAYLISTS } from './data/initialData';
 import { AuthProvider } from './context/AuthContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { ArtistProvider } from './context/ArtistContext';
@@ -13,6 +13,9 @@ import { ToastProvider, useToast } from './context/ToastContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import { PlaybackProvider, usePlayback } from './context/PlaybackContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { DataSaverProvider } from './context/DataSaverContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { LibraryProvider } from './context/LibraryContext';
 
 // Navigation & Player Components
 import { TopAppBar } from './components/navigation/TopAppBar';
@@ -29,6 +32,8 @@ import { MusicPage } from './pages/MusicPage';
 import { SearchPage } from './pages/SearchPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { SongDetailPage } from './pages/SongDetailPage';
+import { AlbumDetailPage } from './pages/AlbumDetailPage';
+import { PlaylistDetailPage } from './pages/PlaylistDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { PaymentStatusPage } from './pages/PaymentStatusPage';
 import { DownloadPage } from './pages/DownloadPage';
@@ -48,6 +53,8 @@ import { PricingPlansPage } from './components/monetization/PricingPlansPage';
 function AppContent() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
   const [songs, setSongs] = useState<Song[]>(INITIAL_SONGS);
+  const [albums, setAlbums] = useState<Album[]>(INITIAL_ALBUMS);
+  const [playlists, setPlaylists] = useState<Playlist[]>(INITIAL_PLAYLISTS);
   const [artistSettings, setArtistSettings] = useState<Partial<ArtistSettings>>({});
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedSongForCheckout, setSelectedSongForCheckout] = useState<Song | null>(null);
@@ -59,7 +66,14 @@ function AppContent() {
 
   const { isAdminAuthenticated } = useAdmin();
   const { isDark } = useTheme();
-  const { playSong } = usePlayback();
+  const { playSong, setCatalogSongs } = usePlayback();
+
+  // Keep playback context catalog synced for autoplay recommendations
+  useEffect(() => {
+    if (songs && songs.length > 0) {
+      setCatalogSongs(songs);
+    }
+  }, [songs, setCatalogSongs]);
 
   // Handle URL synchronizing
   const navigate = (path: string) => {
@@ -78,11 +92,9 @@ function AppContent() {
 
   // Real-time Firestore synchronizer
   useEffect(() => {
-    // Subscribe to published songs in real-time
     const unsubscribeSongs = subscribePublishedSongs(
       (realtimeSongs) => {
         if (realtimeSongs && realtimeSongs.length > 0) {
-          // Merge with initial catalog to ensure rich presentation
           const existingIds = new Set(realtimeSongs.map((s) => s.id));
           const merged = [...realtimeSongs, ...INITIAL_SONGS.filter((s) => !existingIds.has(s.id))];
           setSongs(merged);
@@ -91,24 +103,24 @@ function AppContent() {
             .getSongs()
             .then((apiSongs) => {
               if (apiSongs.length > 0) {
-                const existingIds = new Set(apiSongs.map((s) => s.id));
-                setSongs([...apiSongs, ...INITIAL_SONGS.filter((s) => !existingIds.has(s.id))]);
+                setSongs(apiSongs);
               }
             })
             .catch(() => {});
         }
       },
       (err) => {
-        console.warn('Real-time sync notice:', err.message);
+        console.warn('Realtime subscription fallback:', err);
       }
     );
 
-    // Subscribe to artist settings
-    const unsubscribeSettings = subscribeArtistSettings((settings) => {
-      if (settings) {
-        setArtistSettings(settings);
+    const unsubscribeSettings = subscribeArtistSettings(
+      (settings) => {
+        if (settings) {
+          setArtistSettings(settings);
+        }
       }
-    });
+    );
 
     return () => {
       unsubscribeSongs();
@@ -116,18 +128,15 @@ function AppContent() {
     };
   }, []);
 
-  // Action handlers
+  // Handlers
+  const handleSelectSong = (songId: string) => {
+    setSelectedSongId(songId);
+    navigate(`/song/${songId}`);
+  };
+
   const handleBuy = (song: Song) => {
     setSelectedSongForCheckout(song);
     navigate(`/checkout/${song.id}`);
-  };
-
-  const handleSelectSong = (songId: string) => {
-    setSelectedSongId(songId);
-    const found = songs.find((s) => s.id === songId);
-    if (found) {
-      playSong(found, songs);
-    }
   };
 
   const handlePaymentInitiated = (txRef: string) => {
@@ -135,110 +144,104 @@ function AppContent() {
     navigate(`/payment/status/${txRef}`);
   };
 
-  const handlePaymentSuccess = (order: Order, purchaseToken: string) => {
+  const handlePaymentSuccess = (order: Order, token: string) => {
     setCompletedOrder(order);
-    setCompletedPurchaseToken(purchaseToken);
-    navigate(`/download/${purchaseToken}`);
+    setCompletedPurchaseToken(token);
+    navigate(`/download/${token}`);
   };
 
-  // Resolve Song from path if direct navigation
-  const getActiveSong = (): Song | undefined => {
-    if (selectedSongForCheckout) return selectedSongForCheckout;
-    if (selectedSongId) return songs.find((s) => s.id === selectedSongId);
-    const matchSong = currentPath.match(/\/song\/([a-zA-Z0-9_-]+)/);
-    if (matchSong) return songs.find((s) => s.id === matchSong[1]);
-    const matchCheckout = currentPath.match(/\/checkout\/([a-zA-Z0-9_-]+)/);
-    if (matchCheckout) return songs.find((s) => s.id === matchCheckout[1]);
-    return undefined;
+  // Helper route extractors
+  const getSongIdFromRoute = (): string | null => {
+    const songMatch = currentPath.match(/^\/song\/([^/]+)/);
+    if (songMatch) return songMatch[1];
+    const checkoutMatch = currentPath.match(/^\/checkout\/([^/]+)/);
+    if (checkoutMatch) return checkoutMatch[1];
+    return selectedSongId;
   };
 
-  // Detect artist URL parameter or route
   const getArtistIdFromRoute = (): string | null => {
-    const matchArtist = currentPath.match(/\/artist\/([a-zA-Z0-9_-]+)/);
-    if (matchArtist && matchArtist[1] !== 'studio') {
-      return matchArtist[1];
-    }
-    const params = new URLSearchParams(window.location.search);
-    const queryArtist = params.get('artist');
-    if (queryArtist) return queryArtist;
+    const match = currentPath.match(/^\/artist\/([^/]+)/);
+    if (match && match[1] !== 'studio') return match[1];
     return null;
+  };
+
+  const getAlbumIdFromRoute = (): string | null => {
+    const match = currentPath.match(/^\/album\/([^/]+)/);
+    if (match) return match[1];
+    return null;
+  };
+
+  const getPlaylistIdFromRoute = (): string | null => {
+    const match = currentPath.match(/^\/playlist\/([^/]+)/);
+    if (match) return match[1];
+    return null;
+  };
+
+  const getActiveSong = (): Song | undefined => {
+    const id = getSongIdFromRoute();
+    if (!id) return undefined;
+    return songs.find((s) => s.id === id) || (selectedSongForCheckout?.id === id ? selectedSongForCheckout : undefined);
   };
 
   const isDeepRoute =
     currentPath.startsWith('/song/') ||
+    currentPath.startsWith('/album/') ||
+    currentPath.startsWith('/playlist/') ||
     currentPath.startsWith('/checkout/') ||
     currentPath.startsWith('/payment/') ||
     currentPath.startsWith('/download/') ||
     currentPath.startsWith('/artist/') ||
     currentPath === '/pricing' ||
-    currentPath === '/plans' ||
     currentPath === '/about' ||
     currentPath === '/contact' ||
     currentPath === '/privacy' ||
     currentPath === '/terms' ||
-    currentPath === '/promote';
+    currentPath === '/admin' ||
+    currentPath === '/admin/dashboard';
 
+  // Router View Renderer
   const renderCurrentView = () => {
-    if (isLoading && songs.length === 0) {
-      return (
-        <div className="py-6 space-y-4">
-          <div className="h-40 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <SongGridSkeleton count={4} />
-        </div>
-      );
+    if (isLoading) {
+      return <SongGridSkeleton count={4} />;
     }
 
-    if (error && songs.length === 0) {
+    if (error) {
       return (
-        <div className="py-12">
-          <ErrorState
-            title="Connection Notice"
-            error="Connecting to Projects Mandatory music catalog. Please ensure you have an active network connection."
-            onRetry={() => window.location.reload()}
-          />
-        </div>
-      );
-    }
-
-    // Admin Dashboard Route
-    if (currentPath === '/admin/dashboard' || currentPath === '/admin') {
-      if (!isAdminAuthenticated) {
-        return (
-          <AdminLoginPage
-            onSuccess={() => navigate('/admin/dashboard')}
-            onBack={() => navigate('/')}
-          />
-        );
-      }
-      return (
-        <AdminDashboardPage
-          onLogout={() => navigate('/')}
-          onNavigateStore={() => navigate('/music')}
+        <ErrorState
+          title="Catalogue Unavailable"
+          message={error}
+          actionLabel="Retry Connection"
+          onAction={() => window.location.reload()}
         />
       );
     }
 
-    // Admin Login Route
-    if (currentPath === '/admin/login') {
+    // Admin Routes
+    if (currentPath === '/admin/login' || currentPath === '/admin') {
+      if (isAdminAuthenticated) {
+        return <AdminDashboardPage onNavigate={navigate} />;
+      }
+      return <AdminLoginPage onLoginSuccess={() => navigate('/admin/dashboard')} />;
+    }
+
+    if (currentPath === '/admin/dashboard') {
+      if (!isAdminAuthenticated) {
+        return <AdminLoginPage onLoginSuccess={() => navigate('/admin/dashboard')} />;
+      }
+      return <AdminDashboardPage onNavigate={navigate} />;
+    }
+
+    // Artist Studio Portal
+    if (currentPath === '/artist/studio') {
       return (
-        <AdminLoginPage
-          onSuccess={() => navigate('/admin/dashboard')}
+        <ArtistStudioPage
+          onNavigate={navigate}
           onBack={() => navigate('/')}
         />
       );
     }
 
-    // Artist Studio Portal Route
-    if (currentPath === '/artist/studio') {
-      return (
-        <ArtistStudioPage
-          onNavigateStore={() => navigate('/music')}
-          onNavigateArtistProfile={(artistId) => navigate(`/artist/${artistId}`)}
-        />
-      );
-    }
-
-    // Artists Directory Route
+    // Artists Directory
     if (currentPath === '/artists') {
       return (
         <ArtistsListPage
@@ -255,8 +258,39 @@ function AppContent() {
         <ArtistProfilePage
           artistId={routeArtistId}
           songs={songs}
+          albums={albums}
           onSelectSong={handleSelectSong}
           onNavigate={navigate}
+        />
+      );
+    }
+
+    // Album Detail Route
+    const routeAlbumId = getAlbumIdFromRoute();
+    if (routeAlbumId) {
+      const activeAlbum = albums.find((al) => al.id === routeAlbumId) || albums[0];
+      return (
+        <AlbumDetailPage
+          album={activeAlbum}
+          songs={songs}
+          onBack={() => window.history.back()}
+          onNavigate={navigate}
+          onBuySong={handleBuy}
+        />
+      );
+    }
+
+    // Playlist Detail Route
+    const routePlaylistId = getPlaylistIdFromRoute();
+    if (routePlaylistId) {
+      const activePlaylist = playlists.find((pl) => pl.id === routePlaylistId) || playlists[0];
+      return (
+        <PlaylistDetailPage
+          playlist={activePlaylist}
+          songs={songs}
+          onBack={() => window.history.back()}
+          onNavigate={navigate}
+          onBuySong={handleBuy}
         />
       );
     }
@@ -266,6 +300,8 @@ function AppContent() {
       return (
         <SearchPage
           songs={songs}
+          albums={albums}
+          playlists={playlists}
           onSelectSong={handleSelectSong}
           onNavigate={navigate}
         />
@@ -453,6 +489,8 @@ function AppContent() {
     return (
       <HomePage
         songs={songs}
+        albums={albums}
+        playlists={playlists}
         artistInfo={artistSettings}
         onBuy={handleBuy}
         onSelectSong={handleSelectSong}
@@ -469,9 +507,8 @@ function AppContent() {
           : 'bg-[#F7F8FA] text-[#111827] selection:bg-[#1455D9]/20 selection:text-[#1455D9]'
       }`}
     >
-      {/* Mobile-First Frame container: Full width on phone, neatly centered on tablet/desktop */}
+      {/* Mobile-First Frame container */}
       <div className="max-w-md sm:max-w-xl md:max-w-2xl mx-auto min-h-screen flex flex-col relative shadow-2xl">
-        
         {/* Top App Bar */}
         <TopAppBar
           currentPath={currentPath}
@@ -484,7 +521,7 @@ function AppContent() {
           {renderCurrentView()}
         </main>
 
-        {/* Persistent Mini-Player (sits right above bottom navigation) */}
+        {/* Persistent Mini-Player */}
         <MiniPlayer />
 
         {/* 5-Item Bottom Navigation */}
@@ -506,19 +543,25 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <AdminProvider>
-            <ArtistProvider>
-              <SubscriptionProvider>
-                <PlaybackProvider>
-                  <AppContent />
-                </PlaybackProvider>
-              </SubscriptionProvider>
-            </ArtistProvider>
-          </AdminProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <DataSaverProvider>
+        <NotificationProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <AdminProvider>
+                <ArtistProvider>
+                  <SubscriptionProvider>
+                    <PlaybackProvider>
+                      <LibraryProvider>
+                        <AppContent />
+                      </LibraryProvider>
+                    </PlaybackProvider>
+                  </SubscriptionProvider>
+                </ArtistProvider>
+              </AdminProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </NotificationProvider>
+      </DataSaverProvider>
     </ThemeProvider>
   );
 }

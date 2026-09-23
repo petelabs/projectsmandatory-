@@ -18,6 +18,8 @@ import {
   ExternalLink,
   Gift,
   Users,
+  Smartphone,
+  Wifi,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -25,6 +27,8 @@ import { usePlayback } from '../context/PlaybackContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAdmin } from '../context/AdminContext';
 import { useToast } from '../context/ToastContext';
+import { useDataSaver } from '../context/DataSaverContext';
+import { PWAInstallButton } from '../components/common/PWAInstallButton';
 import { GiftSubscriptionModal } from '../components/monetization/GiftSubscriptionModal';
 import { ClaimGiftModal } from '../components/monetization/ClaimGiftModal';
 import { FamilyPlanModal } from '../components/monetization/FamilyPlanModal';
@@ -34,12 +38,13 @@ interface AccountPageProps {
 }
 
 export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, logout, loginWithGoogle, loginAsGuest } = useAuth();
-  const { currentTier, subscription, canDownloadOffline } = useSubscription();
+  const { user, isAuthenticated, logout } = useAuth();
+  const { currentTier } = useSubscription();
   const { likedSongIds, offlineSongs } = usePlayback();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
   const { isAdminAuthenticated } = useAdmin();
   const { showToast } = useToast();
+  const { isDataSaverEnabled, toggleDataSaver } = useDataSaver();
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -381,10 +386,15 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
 
               <div className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-800">
                 <div>
-                  <h4 className="text-xs font-bold">Data Saver</h4>
-                  <p className="text-[11px] text-slate-400">Reduces cellular data on mobile</p>
+                  <h4 className="text-xs font-bold">Data Saver Mode</h4>
+                  <p className="text-[11px] text-slate-400">Lowers image sizes & disables heavy animations</p>
                 </div>
-                <input type="checkbox" defaultChecked className="toggle rounded accent-[#1455D9]" />
+                <input
+                  type="checkbox"
+                  checked={isDataSaverEnabled}
+                  onChange={toggleDataSaver}
+                  className="w-5 h-5 accent-[#1455D9] rounded cursor-pointer"
+                />
               </div>
 
               <div className="pt-2">

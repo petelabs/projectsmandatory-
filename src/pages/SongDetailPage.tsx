@@ -16,12 +16,17 @@ import {
   Heart,
   TrendingUp,
   Zap,
+  Play,
+  Pause,
+  ListPlus,
+  PlaySquare,
 } from 'lucide-react';
 import { Song } from '../types';
 import { Badge } from '../components/common/Badge';
 import { useToast } from '../context/ToastContext';
 import { useArtist } from '../context/ArtistContext';
 import { useAuth } from '../context/AuthContext';
+import { usePlayback } from '../context/PlaybackContext';
 
 interface SongDetailPageProps {
   song: Song;
@@ -38,6 +43,11 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
   const { showToast } = useToast();
   const { isArtist, artistProfile, createSongBoostLink } = useArtist();
   const { user } = useAuth();
+  const { currentSong, isPlaying, playSong, togglePlay, playNext, addToQueue, isLiked, toggleLikeSong } = usePlayback();
+
+  const isCurrent = currentSong?.id === song.id;
+  const isThisPlaying = isCurrent && isPlaying;
+  const isSongLiked = isLiked(song.id);
 
   // Generate unique boost referral link
   const boostLink = isArtist && artistProfile
@@ -66,6 +76,25 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
     } else {
       handleCopyBoostLink();
     }
+  };
+
+  const handlePlayToggle = () => {
+    if (isCurrent) {
+      togglePlay();
+    } else {
+      playSong(song);
+      showToast(`Playing "${song.title}"`, 'success');
+    }
+  };
+
+  const handlePlayNext = () => {
+    playNext(song);
+    showToast(`"${song.title}" will play next`, 'success');
+  };
+
+  const handleAddToQueue = () => {
+    addToQueue(song);
+    showToast(`Added "${song.title}" to queue`, 'success');
   };
 
   const artistShareMWK = Math.round(song.priceMWK * 0.7);
@@ -107,7 +136,7 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
           
           {/* Large Artwork */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 shadow-2xl">
+            <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-700/80 shadow-2xl group/cover">
               <img
                 src={song.coverImage}
                 alt={song.title}
@@ -118,6 +147,24 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
                 {song.isLatest && <Badge variant="accent">NEW RELEASE</Badge>}
                 {song.isPopular && <Badge variant="primary">POPULAR</Badge>}
               </div>
+
+              {/* Quick Play/Stream Overlay Button */}
+              <button
+                onClick={handlePlayToggle}
+                aria-label={isThisPlaying ? `Pause ${song.title}` : `Play ${song.title}`}
+                className={`absolute inset-0 m-auto w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-2xl z-20 ${
+                  isThisPlaying
+                    ? 'bg-[#E53935] text-white scale-100'
+                    : 'bg-black/75 hover:bg-[#E53935] text-white hover:scale-110'
+                }`}
+              >
+                {isThisPlaying ? (
+                  <Pause className="w-7 h-7 fill-current" />
+                ) : (
+                  <Play className="w-7 h-7 fill-current ml-1" />
+                )}
+              </button>
+
               <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md text-xs font-mono text-slate-200 border border-white/10">
                 Official Master
               </div>
@@ -164,6 +211,54 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 {song.description}
               </p>
+            </div>
+
+            {/* Streaming & Queue Quick Actions */}
+            <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={handlePlayToggle}
+                className="px-4 py-2.5 rounded-xl bg-[#1455D9] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-2 transition active:scale-95 shadow-md"
+              >
+                {isThisPlaying ? (
+                  <>
+                    <Pause className="w-4 h-4 fill-current" />
+                    <span>Pause Stream</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                    <span>Play Stream</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handlePlayNext}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+              >
+                <PlaySquare className="w-4 h-4 text-emerald-400" />
+                <span>Play Next</span>
+              </button>
+
+              <button
+                onClick={handleAddToQueue}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+              >
+                <ListPlus className="w-4 h-4 text-purple-400" />
+                <span>Add to Queue</span>
+              </button>
+
+              <button
+                onClick={() => toggleLikeSong(song.id)}
+                className={`min-h-[38px] px-3 py-2 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
+                  isSongLiked
+                    ? 'border-rose-500/40 bg-rose-950/40 text-rose-400'
+                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${isSongLiked ? 'fill-current' : ''}`} />
+                <span>{isSongLiked ? 'Liked' : 'Like'}</span>
+              </button>
             </div>
 
             {/* Audio Specification Matrix */}
@@ -267,94 +362,6 @@ export const SongDetailPage: React.FC<SongDetailPageProps> = ({
             )}
 
           </div>
-        </div>
-      </div>
-
-      {/* Track Information Tabs (Liner Notes, Lyrics, Download Policy) */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
-              activeTab === 'details'
-                ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Liner Notes & Credits
-          </button>
-          {song.lyrics && (
-            <button
-              onClick={() => setActiveTab('lyrics')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
-                activeTab === 'lyrics'
-                  ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
-                : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Lyrics
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('license')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
-              activeTab === 'license'
-                ? 'bg-rose-600/20 text-rose-400 border border-rose-500/40'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Download & Usage Policy
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
-          {activeTab === 'details' && (
-            <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
-              <h3 className="text-sm font-bold text-white">Recording & Production Credits</h3>
-              <p>
-                <strong>Title:</strong> {song.title} <br />
-                <strong>Primary Artist:</strong> {song.artist} <br />
-                {song.featuredArtists && <><strong>Featured Artists:</strong> {song.featuredArtists} <br /></>}
-                <strong>Producer:</strong> {song.producer || 'Projects Mandatory Studios'} <br />
-                <strong>Release Date:</strong> {song.releaseDate} <br />
-                <strong>Copyright:</strong> © 2026 PROJECTS MANDATORY. Master recording rights reserved.
-              </p>
-              {song.tags && song.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-2">
-                  {song.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'lyrics' && song.lyrics && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-bold text-white mb-2">Official Track Lyrics</h3>
-              <pre className="font-sans text-xs text-slate-300 whitespace-pre-wrap leading-relaxed font-normal bg-slate-950 p-4 rounded-xl border border-slate-800">
-                {song.lyrics}
-              </pre>
-            </div>
-          )}
-
-          {activeTab === 'license' && (
-            <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
-              <h3 className="text-sm font-bold text-white">Personal Digital Ownership License</h3>
-              <ul className="list-disc pl-5 space-y-1.5 text-slate-400">
-                <li>Upon verified purchase, you receive a full DRM-free studio audio file to keep forever.</li>
-                <li>Download is authorized for up to 5 attempts across your personal devices.</li>
-                <li>Files can be imported into your phone music player, car stereo, computer, or personal audio devices.</li>
-                <li>Commercial redistribution, resale, or unauthorized public rebroadcast is strictly prohibited under Malawi copyright law.</li>
-              </ul>
-            </div>
-          )}
         </div>
       </div>
     </div>
