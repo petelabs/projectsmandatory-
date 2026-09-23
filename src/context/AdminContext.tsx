@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider, AUTHORIZED_ADMIN_EMAILS, isAuthorizedAdmin } from '../lib/firebase';
+import { auth, googleProvider, isAuthorizedAdmin } from '../lib/firebase';
 
 interface AdminContextType {
   isAdminAuthenticated: boolean;
@@ -9,7 +9,6 @@ interface AdminContextType {
   artistName: string;
   loginWithGoogle: () => Promise<string>;
   logout: () => void;
-  authorizedEmails: readonly string[];
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
@@ -21,18 +20,18 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [adminEmail, setAdminEmail] = useState<string | null>(() => {
     return localStorage.getItem('hapsin_admin_email') || null;
   });
-  const [artistName, setArtistName] = useState<string>('Hapsin');
+  const [artistName] = useState<string>('Projects Mandatory');
 
-  // Listen to Firebase Auth state to auto-recognize authorized admins
+  // Listen to Firebase Auth state to auto-recognize authorized admins securely
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user && isAuthorizedAdmin(user.email)) {
-        const token = `hapsin_admin_${user.uid}_${Date.now()}`;
+        const token = `pm_admin_${user.uid}_${Date.now()}`;
         setAdminToken(token);
         setAdminEmail(user.email || null);
-        localStorage.setItem('hapsin_admin_token', token);
-        if (user.email) localStorage.setItem('hapsin_admin_email', user.email);
-      } else if (!user && !localStorage.getItem('hapsin_admin_token')) {
+        localStorage.setItem('pm_admin_token', token);
+        if (user.email) localStorage.setItem('pm_admin_email', user.email);
+      } else if (!user && !localStorage.getItem('pm_admin_token')) {
         setAdminToken(null);
         setAdminEmail(null);
       }
@@ -43,11 +42,12 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     if (adminToken) {
-      localStorage.setItem('hapsin_admin_token', adminToken);
-      if (adminEmail) localStorage.setItem('hapsin_admin_email', adminEmail);
+      localStorage.setItem('pm_admin_token', adminToken);
+      if (adminEmail) localStorage.setItem('pm_admin_email', adminEmail);
     } else {
-      localStorage.removeItem('hapsin_admin_token');
       localStorage.removeItem('pm_admin_token');
+      localStorage.removeItem('hapsin_admin_token');
+      localStorage.removeItem('pm_admin_email');
       localStorage.removeItem('hapsin_admin_email');
     }
   }, [adminToken, adminEmail]);
@@ -58,11 +58,11 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const userEmail = result.user?.email || '';
       
       if (isAuthorizedAdmin(userEmail)) {
-        const token = `hapsin_admin_${result.user.uid}_${Date.now()}`;
+        const token = `pm_admin_${result.user.uid}_${Date.now()}`;
         setAdminToken(token);
         setAdminEmail(userEmail);
-        localStorage.setItem('hapsin_admin_token', token);
-        localStorage.setItem('hapsin_admin_email', userEmail);
+        localStorage.setItem('pm_admin_token', token);
+        localStorage.setItem('pm_admin_email', userEmail);
         return userEmail;
       }
 
@@ -70,7 +70,7 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setAdminToken(null);
       setAdminEmail(null);
       throw new Error(
-        `Access Denied: The Google account "${userEmail}" is not authorized for Hapsin Admin. Access is strictly limited to alwaysgoodone265@gmail.com and petedianolabs@gmail.com.`
+        'Access Denied: The authenticated Google account does not have administrator privileges for Projects Mandatory.'
       );
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user') {
@@ -83,8 +83,9 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const logout = () => {
     setAdminToken(null);
     setAdminEmail(null);
-    localStorage.removeItem('hapsin_admin_token');
     localStorage.removeItem('pm_admin_token');
+    localStorage.removeItem('hapsin_admin_token');
+    localStorage.removeItem('pm_admin_email');
     localStorage.removeItem('hapsin_admin_email');
   };
 
@@ -97,7 +98,6 @@ export const AdminProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         artistName,
         loginWithGoogle,
         logout,
-        authorizedEmails: AUTHORIZED_ADMIN_EMAILS,
       }}
     >
       {children}

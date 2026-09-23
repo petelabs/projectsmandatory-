@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ArrowLeft, Disc, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, AlertCircle, Lock } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { Button } from '../../components/common/Button';
 import { useToast } from '../../context/ToastContext';
@@ -10,7 +10,7 @@ interface AdminLoginPageProps {
 }
 
 export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onSuccess, onBack }) => {
-  const { loginWithGoogle, authorizedEmails } = useAdmin();
+  const { loginWithGoogle } = useAdmin();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,11 +20,11 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onSuccess, onBac
     setIsLoading(true);
 
     try {
-      const email = await loginWithGoogle();
-      showToast(`Welcome back, Hapsin Administrator (${email})`, 'success');
+      await loginWithGoogle();
+      showToast('Admin credentials verified. Welcome to Projects Mandatory Admin Console.', 'success');
       onSuccess();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Google authentication failed';
+      const msg = err instanceof Error ? err.message : 'Authentication failed. Please verify your administrative credentials.';
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -33,41 +33,41 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onSuccess, onBac
   };
 
   return (
-    <div className="max-w-md mx-auto space-y-6 text-left animate-in fade-in py-8">
+    <div className="max-w-md mx-auto space-y-6 text-left animate-in fade-in py-10">
       <button
         onClick={onBack}
         className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white py-1 transition"
       >
         <ArrowLeft className="w-4 h-4" />
-        <span>Return to Music Store</span>
+        <span>Return to Storefront</span>
       </button>
 
-      <div className="rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/40">
-            <ShieldCheck className="w-7 h-7" />
+      <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
+        <div className="text-center space-y-2.5">
+          <div className="w-14 h-14 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-lg shadow-rose-950/40">
+            <Lock className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-extrabold text-white font-['Syne',sans-serif]">
-            Hapsin Admin Portal
+            Projects Mandatory Admin
           </h1>
-          <p className="text-xs text-slate-400">
-            Secure administrative access for managing Hapsin music catalog, orders, and artist promotion requests.
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Restricted administrative gateway for catalog moderation, artist track approvals, payouts, and customer inquiries.
           </p>
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-950/50 border border-rose-800/80 text-xs text-rose-300 flex items-start gap-2.5">
+          <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-xs text-rose-300 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <span>{error}</span>
+            <span className="leading-relaxed">{error}</span>
           </div>
         )}
 
         <div className="space-y-4">
           <Button
             type="button"
-            variant="success"
+            variant="primary"
             size="lg"
-            className="w-full flex items-center justify-center gap-3 py-3.5 font-semibold text-sm shadow-lg shadow-emerald-950/60"
+            className="w-full flex items-center justify-center gap-3 py-3.5 font-semibold text-sm shadow-lg shadow-rose-950/60 bg-rose-600 hover:bg-rose-500"
             isLoading={isLoading}
             onClick={handleGoogleLogin}
           >
@@ -89,22 +89,17 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onSuccess, onBac
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>Sign In with Google Account</span>
+            <span>Sign In with Authorized Google Account</span>
           </Button>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 text-xs text-slate-400 space-y-2">
-          <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Authorized Administrator Accounts:</span>
+        <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 text-xs text-slate-400 space-y-1.5 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-slate-300 font-semibold text-xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Encrypted Production Security</span>
           </div>
-          <ul className="space-y-1 font-mono text-[11px] text-emerald-400 pl-6 list-disc">
-            {authorizedEmails.map((email) => (
-              <li key={email}>{email}</li>
-            ))}
-          </ul>
-          <p className="text-[11px] text-slate-500 pt-1">
-            Zero environment variable dependencies required. Simply authenticate with one of the authorized Google accounts above.
+          <p className="text-[11px] text-slate-500">
+            Administrative access is strictly protected by role-based Firebase authentication and security rules.
           </p>
         </div>
       </div>

@@ -26,9 +26,20 @@ import {
   Play,
   Pause,
   ExternalLink,
-  MailCheck,
+  Users,
+  Smartphone,
+  Send,
+  XCircle,
+  TrendingUp,
 } from 'lucide-react';
-import { Song, Order, MusicPromotionRequest, ContactMessage } from '../../types';
+import {
+  Song,
+  Order,
+  MusicPromotionRequest,
+  ContactMessage,
+  ArtistProfile,
+  ArtistSongSubmission,
+} from '../../types';
 import {
   uploadAudioToStorage,
   uploadCoverToStorage,
@@ -42,7 +53,12 @@ import {
   subscribeContactMessages,
   markContactMessageRead,
   deleteContactMessage,
-  AUTHORIZED_ADMIN_EMAILS,
+  subscribeAllSongSubmissions,
+  approveAndPublishSong,
+  rejectSongSubmission,
+  deleteSongSubmission,
+  subscribeAllArtists,
+  processArtistPayout,
   OFFICIAL_WHATSAPP_NUMBER,
   OFFICIAL_WHATSAPP_LINK,
 } from '../../lib/firebase';
@@ -57,6 +73,8 @@ interface AdminDashboardPageProps {
   onNavigateStore: () => void;
 }
 
+type AdminTab = 'songs' | 'submissions' | 'artists' | 'requests' | 'messages' | 'orders';
+
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onLogout,
   onNavigateStore,
@@ -64,17 +82,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const { adminEmail, logout } = useAdmin();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'songs' | 'requests' | 'messages' | 'orders'>('songs');
+  const [activeTab, setActiveTab] = useState<AdminTab>('submissions');
   const [songs, setSongs] = useState<Song[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [submissions, setSubmissions] = useState<ArtistSongSubmission[]>([]);
+  const [artists, setArtists] = useState<ArtistProfile[]>([]);
   const [promoRequests, setPromoRequests] = useState<MusicPromotionRequest[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [submissionFilter, setSubmissionFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [requestFilter, setRequestFilter] = useState<'ALL' | 'PENDING' | 'ACCEPTED' | 'REJECTED'>('ALL');
   const [messageFilter, setMessageFilter] = useState<'ALL' | 'UNREAD' | 'READ'>('ALL');
   const [isLoading, setIsLoading] = useState(true);
 
   // Audio Preview in Dashboard
-  const [playingRequestId, setPlayingRequestId] = useState<string | null>(null);
+  const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
 
   // Modal state for Song editing/uploading
@@ -91,7 +112,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string>('');
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isProcessingRequest, setIsProcessingRequest] = useState<string | null>(null);
+  const [processingSubmissionId, setProcessingSubmissionId] = useState<string | null>(null);
+  const [rejectFeedback, setRejectFeedback] = useState<string>('');
+  const [rejectModalSubmission, setRejectModalSubmission] = useState<ArtistSongSubmission | null>(null);
+
+  // Payout Modal state
+  const [selectedArtistForPayout, setSelectedArtistForPayout] = useState<ArtistProfile | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState<number>(0);
+  const [payoutNotes, setPayoutNotes] = useState<string>('');
+  const [isProcessingPayout, setIsProcessingPayout] = useState<boolean>(false);
 
   const audioInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -100,681 +129,431 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   useEffect(() => {
     setIsLoading(true);
 
-    // 1. Subscribe to all songs in real-time
-    const unsubscribeSongs = subscribeAllSongs((realtimeSongs) => {
-      setSongs(realtimeSongs);
+    const unsubSongs = subscribeAllSongs((data) => {
+      setSongs(data);
       setIsLoading(false);
     });
 
-    // 2. Subscribe to orders in real-time
-    const unsubscribeOrders = subscribeOrders((realtimeOrders) => {
-      setOrders(realtimeOrders);
+    const unsubOrders = subscribeOrders((data) => {
+      setOrders(data);
     });
 
-    // 3. Subscribe to music promotion requests in real-time
-    const unsubscribePromo = subscribePromotionRequests((requests) => {
-      setPromoRequests(requests);
+    const unsubSubmissions = subscribeAllSongSubmissions((data) => {
+      setSubmissions(data);
     });
 
-    // 4. Subscribe to customer contact messages in real-time
-    const unsubscribeMessages = subscribeContactMessages((messages) => {
-      setContactMessages(messages);
+    const unsubArtists = subscribeAllArtists((data) => {
+      setArtists(data);
+    });
+
+    const unsubPromo = subscribePromotionRequests((data) => {
+      setPromoRequests(data);
+    });
+
+    const unsubMessages = subscribeContactMessages((data) => {
+      setContactMessages(data);
     });
 
     return () => {
-      unsubscribeSongs();
-      unsubscribeOrders();
-      unsubscribePromo();
-      unsubscribeMessages();
+      unsubSongs();
+      unsubOrders();
+      unsubSubmissions();
+      unsubArtists();
+      unsubPromo();
+      unsubMessages();
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
     };
   }, []);
 
-  // Compute live statistics from real Firestore orders & messages
-  const paidOrders = orders.filter((o) => o.status === 'PAID');
-  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
-  const totalSales = paidOrders.length;
-  const totalDownloads = orders.reduce((sum, o) => sum + (o.downloadCount || 0), 0);
-  const pendingRequestsCount = promoRequests.filter((r) => r.status === 'PENDING').length;
-  const unreadMessagesCount = contactMessages.filter((m) => !m.read).length;
-
-  // Clean WhatsApp Link Generator with NO auto-filled message
-  const getCleanWhatsAppLink = (rawPhone: string) => {
-    let clean = (rawPhone || '').replace(/[^0-9]/g, '');
-    if (clean.startsWith('0')) {
-      clean = '265' + clean.substring(1);
-    } else if (clean.length === 9 && (clean.startsWith('8') || clean.startsWith('9'))) {
-      clean = '265' + clean;
-    }
-    return `https://wa.me/${clean}`;
-  };
-
-  // Audio preview playback handler
-  const handleTogglePlayAudio = (requestId: string, audioUrl?: string) => {
-    if (!audioUrl) {
-      showToast('No preview audio stream available for this track', 'info');
+  // Audio preview helper
+  const handleTogglePlayAudio = (url?: string) => {
+    if (!url) {
+      showToast('No audio recording stream available', 'info');
       return;
     }
 
-    if (playingRequestId === requestId) {
-      audioPreviewRef.current?.pause();
-      setPlayingRequestId(null);
+    if (playingAudioUrl === url) {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      setPlayingAudioUrl(null);
     } else {
       if (audioPreviewRef.current) {
-        audioPreviewRef.current.src = audioUrl;
-        audioPreviewRef.current.play().catch((err) => {
-          console.warn('Playback error:', err);
-          showToast('Could not play audio preview directly in browser', 'error');
-        });
-        setPlayingRequestId(requestId);
+        audioPreviewRef.current.pause();
       }
+      const audio = new Audio(url);
+      audio.play();
+      audio.onended = () => setPlayingAudioUrl(null);
+      audioPreviewRef.current = audio;
+      setPlayingAudioUrl(url);
     }
   };
 
-  // Accept Promotion Request & Publish to Catalog
-  const handleAcceptRequest = async (request: MusicPromotionRequest) => {
-    setIsProcessingRequest(request.id);
+  // Approve artist track submission and publish to catalog
+  const handleApproveSubmission = async (sub: ArtistSongSubmission) => {
+    setProcessingSubmissionId(sub.id);
     try {
-      const newSongId = `song-promo-${Date.now()}`;
-      const newSong: Song = {
-        id: newSongId,
-        title: request.songTitle,
-        artist: request.artistName,
-        featuredArtists: request.featuredArtists || '',
-        genre: request.genre || 'Afro-fusion',
-        priceMWK: request.proposedPriceMWK ?? 1500,
+      await approveAndPublishSong(sub);
+      showToast(`Track "${sub.title}" by ${sub.artistName} approved and published to store!`, 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to approve track';
+      showToast(msg, 'error');
+    } finally {
+      setProcessingSubmissionId(null);
+    }
+  };
+
+  // Reject artist track submission
+  const handleConfirmReject = async () => {
+    if (!rejectModalSubmission) return;
+    setProcessingSubmissionId(rejectModalSubmission.id);
+    try {
+      await rejectSongSubmission(rejectModalSubmission.id, rejectFeedback.trim());
+      showToast(`Submission rejected with feedback sent to artist.`, 'info');
+      setRejectModalSubmission(null);
+      setRejectFeedback('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to reject track';
+      showToast(msg, 'error');
+    } finally {
+      setProcessingSubmissionId(null);
+    }
+  };
+
+  // Process Payout Disbursement
+  const handleDisbursePayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedArtistForPayout || payoutAmount <= 0) return;
+
+    setIsProcessingPayout(true);
+    try {
+      await processArtistPayout(
+        selectedArtistForPayout.id,
+        payoutAmount,
+        payoutNotes.trim() || `Disbursed to ${selectedArtistForPayout.payoutDetails?.accountNumber || selectedArtistForPayout.phone}`
+      );
+      showToast(`MK ${payoutAmount.toLocaleString()} payout successfully recorded for ${selectedArtistForPayout.artistName}!`, 'success');
+      setSelectedArtistForPayout(null);
+      setPayoutAmount(0);
+      setPayoutNotes('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not process payout';
+      showToast(msg, 'error');
+    } finally {
+      setIsProcessingPayout(false);
+    }
+  };
+
+  // Open modal to create/edit song
+  const handleOpenSongModal = (song?: Song) => {
+    if (song) {
+      setEditingSong(song);
+      setCoverPreviewUrl(song.coverImage || '');
+      setAudioUploadSuccess(!!song.audioFilePath);
+    } else {
+      setEditingSong({
+        id: `song-${Date.now()}`,
+        title: '',
+        artist: 'Hapsin',
+        featuredArtists: '',
+        genre: 'Afro-fusion',
         releaseDate: new Date().toISOString().split('T')[0],
-        coverImage: request.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop',
-        description: request.description || `Promoted music on Projects Mandatory by ${request.artistName}.`,
-        audioFilePath: request.audioFilePath || '',
-        audioFileName: request.audioFileName || `${request.songTitle}.mp3`,
+        priceMWK: 1500,
+        description: '',
         fileFormat: '320kbps MP3 Master',
         fileSize: 'Studio Master',
         isPublished: true,
         isLatest: true,
         downloadCount: 0,
         createdAt: new Date().toISOString(),
-      };
-
-      await saveSongToFirestore(newSong);
-      await updatePromotionRequestStatus(request.id, 'ACCEPTED', 'Approved and published to Projects Mandatory catalog.');
-
-      showToast(`Accepted "${request.songTitle}" by ${request.artistName}! Published to store catalog.`, 'success');
-    } catch (err: any) {
-      console.error('Accept request error:', err);
-      showToast(err.message || 'Failed to accept promotion request', 'error');
-    } finally {
-      setIsProcessingRequest(null);
-    }
-  };
-
-  // Reject Promotion Request
-  const handleRejectRequest = async (requestId: string, artistName: string) => {
-    const reason = window.prompt(`Enter optional rejection notes or feedback for ${artistName}:`, 'Track did not meet master audio quality guidelines.');
-    if (reason === null) return;
-
-    setIsProcessingRequest(requestId);
-    try {
-      await updatePromotionRequestStatus(requestId, 'REJECTED', reason);
-      showToast(`Request by ${artistName} marked as rejected.`, 'info');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to reject request', 'error');
-    } finally {
-      setIsProcessingRequest(null);
-    }
-  };
-
-  // Delete Promotion Request
-  const handleDeleteRequest = async (requestId: string, songTitle: string) => {
-    if (!window.confirm(`Are you sure you want to delete the promotion request for "${songTitle}"?`)) {
-      return;
-    }
-
-    try {
-      await deletePromotionRequest(requestId);
-      showToast('Promotion request deleted.', 'info');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to delete request', 'error');
-    }
-  };
-
-  // Toggle Contact Message Read/Unread
-  const handleToggleMessageRead = async (msg: ContactMessage) => {
-    try {
-      await markContactMessageRead(msg.id, !msg.read);
-      showToast(`Message marked as ${!msg.read ? 'read' : 'unread'}.`);
-    } catch (err) {
-      showToast('Failed to update message status', 'error');
-    }
-  };
-
-  // Delete Contact Message
-  const handleDeleteMessage = async (msgId: string) => {
-    if (!window.confirm('Are you sure you want to delete this customer message?')) {
-      return;
-    }
-    try {
-      await deleteContactMessage(msgId);
-      showToast('Message deleted.', 'info');
-    } catch (err) {
-      showToast('Failed to delete message', 'error');
-    }
-  };
-
-  // Handle Cover File Selection
-  const handleCoverSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image file (.jpg, .png, .webp)', 'error');
-      return;
-    }
-
-    setCoverFile(file);
-    setCoverPreviewUrl(URL.createObjectURL(file));
-    setCoverUploadProgress(0);
-
-    try {
-      showToast('Uploading cover artwork to Firebase Cloud Storage...', 'info');
-      const { downloadUrl } = await uploadCoverToStorage(file, (pct) => {
-        setCoverUploadProgress(pct);
       });
-
-      setEditingSong((prev) => ({
-        ...prev,
-        coverImage: downloadUrl,
-      }));
-      setCoverUploadProgress(100);
-      showToast('Cover artwork uploaded successfully!', 'success');
-    } catch (err) {
-      console.error('Cover upload error:', err);
-      showToast('Failed to upload cover image to Firebase Storage', 'error');
-      setCoverUploadProgress(null);
+      setCoverPreviewUrl('');
+      setAudioUploadSuccess(false);
     }
-  };
-
-  // Handle Master Audio File Selection
-  const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const validExts = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg'];
-    const isAudio = validExts.some((ext) => file.name.toLowerCase().endsWith(ext)) || file.type.startsWith('audio/');
-    if (!isAudio) {
-      showToast('Please upload an audio master file (.mp3, .wav, .flac)', 'error');
-      return;
-    }
-
-    setAudioFile(file);
-    setAudioUploadProgress(0);
-    setAudioUploadSuccess(false);
-
-    try {
-      showToast('Uploading studio master file to Firebase Cloud Storage...', 'info');
-      const result = await uploadAudioToStorage(file, (pct) => {
-        setAudioUploadProgress(pct);
-      });
-
-      setEditingSong((prev) => ({
-        ...prev,
-        audioFilePath: result.storagePath,
-        audioFileName: result.fileName,
-        fileSize: result.fileSize,
-        fileFormat: result.fileFormat,
-      }));
-
-      setAudioUploadProgress(100);
-      setAudioUploadSuccess(true);
-      showToast(`Master file "${file.name}" uploaded to Cloud Storage!`, 'success');
-    } catch (err) {
-      console.error('Audio upload error:', err);
-      showToast('Failed to upload master audio file to Firebase Storage', 'error');
-      setAudioUploadProgress(null);
-    }
-  };
-
-  const handleOpenAddModal = () => {
-    setEditingSong({
-      id: `hapsin-song-${Date.now()}`,
-      title: '',
-      artist: 'Hapsin',
-      featuredArtists: '',
-      producer: 'Projects Mandatory Studios',
-      genre: 'Afro-fusion',
-      priceMWK: 1500,
-      releaseDate: new Date().toISOString().split('T')[0],
-      coverImage: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop',
-      description: '',
-      fileSize: '10.5 MB',
-      fileFormat: '320kbps MP3 Master',
-      isPublished: true,
-      isLatest: false,
-      isFeatured: false,
-      isPopular: false,
-      downloadCount: 0,
-      createdAt: new Date().toISOString(),
-    });
     setAudioFile(null);
     setAudioUploadProgress(null);
-    setAudioUploadSuccess(false);
     setCoverFile(null);
     setCoverUploadProgress(null);
-    setCoverPreviewUrl('');
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (song: Song) => {
-    setEditingSong(song);
-    setAudioFile(null);
-    setAudioUploadProgress(null);
-    setAudioUploadSuccess(!!song.audioFilePath);
-    setCoverFile(null);
-    setCoverUploadProgress(null);
-    setCoverPreviewUrl(song.coverImage || '');
-    setIsModalOpen(true);
-  };
-
+  // Handle Save Song
   const handleSaveSong = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSong || !editingSong.title) {
-      showToast('Please provide a song title', 'error');
+      showToast('Track title is required', 'error');
       return;
     }
 
     setIsSaving(true);
     try {
-      const songToSave: Song = {
-        id: editingSong.id || `hapsin-song-${Date.now()}`,
-        title: editingSong.title.trim(),
-        artist: editingSong.artist?.trim() || 'Hapsin',
-        featuredArtists: editingSong.featuredArtists?.trim() || '',
-        producer: editingSong.producer?.trim() || '',
-        genre: editingSong.genre?.trim() || 'Afro-beats',
-        priceMWK: Number(editingSong.priceMWK) || 1500,
+      let finalAudioUrl = editingSong.audioFilePath || '';
+      let finalAudioFileName = editingSong.audioFileName || `${editingSong.title}.mp3`;
+      let finalFileSize = editingSong.fileSize || 'Studio Master';
+      let finalFileFormat = editingSong.fileFormat || '320kbps MP3 Master';
+
+      // 1. Upload audio if file selected
+      if (audioFile) {
+        showToast('Uploading master audio recording to storage...', 'info');
+        const audioUploadResult = await uploadAudioToStorage(audioFile, (percent) => {
+          setAudioUploadProgress(percent);
+        });
+        finalAudioUrl = audioUploadResult.downloadUrl;
+        finalAudioFileName = audioUploadResult.fileName;
+        finalFileSize = audioUploadResult.fileSize;
+        finalFileFormat = audioUploadResult.fileFormat;
+      }
+
+      // 2. Upload cover if file selected
+      let finalCoverUrl = coverPreviewUrl || editingSong.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop';
+      if (coverFile) {
+        showToast('Uploading cover image to storage...', 'info');
+        const coverUploadResult = await uploadCoverToStorage(coverFile, (percent) => {
+          setCoverUploadProgress(percent);
+        });
+        finalCoverUrl = coverUploadResult.downloadUrl;
+      }
+
+      const songPayload: Song = {
+        id: editingSong.id || `song-${Date.now()}`,
+        title: editingSong.title,
+        artist: editingSong.artist || 'Hapsin',
+        featuredArtists: editingSong.featuredArtists || '',
+        genre: editingSong.genre || 'Afro-fusion',
         releaseDate: editingSong.releaseDate || new Date().toISOString().split('T')[0],
-        coverImage: editingSong.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop',
+        priceMWK: Math.min(Math.max(0, editingSong.priceMWK || 0), 5000), // capped at 5000 MWK
+        coverImage: finalCoverUrl,
         description: editingSong.description || '',
         lyrics: editingSong.lyrics || '',
-        audioFilePath: editingSong.audioFilePath || '',
-        audioFileName: editingSong.audioFileName || '',
-        fileFormat: editingSong.fileFormat || '320kbps MP3 Master',
-        fileSize: editingSong.fileSize || '9.5 MB',
-        isPublished: editingSong.isPublished !== false,
-        isLatest: !!editingSong.isLatest,
-        isFeatured: !!editingSong.isFeatured,
-        isPopular: !!editingSong.isPopular,
+        audioFilePath: finalAudioUrl,
+        audioFileName: finalAudioFileName,
+        fileFormat: finalFileFormat,
+        fileSize: finalFileSize,
+        isPublished: editingSong.isPublished ?? true,
+        isLatest: editingSong.isLatest ?? true,
         downloadCount: editingSong.downloadCount || 0,
         createdAt: editingSong.createdAt || new Date().toISOString(),
       };
 
-      await saveSongToFirestore(songToSave);
-      showToast(`Track "${songToSave.title}" saved to Firestore database!`, 'success');
+      await saveSongToFirestore(songPayload);
+      showToast(`"${songPayload.title}" saved to live catalog!`, 'success');
       setIsModalOpen(false);
-      setEditingSong(null);
-    } catch (err) {
-      console.error('Save song error:', err);
-      showToast('Failed to save song to database', 'error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save song';
+      showToast(msg, 'error');
     } finally {
       setIsSaving(false);
+      setAudioUploadProgress(null);
+      setCoverUploadProgress(null);
     }
   };
 
+  // Toggle Song Published
   const handleTogglePublish = async (song: Song) => {
     try {
-      const updated = { ...song, isPublished: song.isPublished === false };
-      await saveSongToFirestore(updated);
-      showToast(`Track "${song.title}" is now ${updated.isPublished ? 'Published' : 'Unpublished'}`);
+      await saveSongToFirestore({
+        ...song,
+        isPublished: !song.isPublished,
+      });
+      showToast(`Track status changed to ${!song.isPublished ? 'Published' : 'Unpublished'}`, 'info');
     } catch (err) {
-      showToast('Failed to update status', 'error');
+      showToast('Could not update status', 'error');
     }
   };
 
-  const handleQuickPriceUpdate = async (song: Song, newPrice: number) => {
-    if (isNaN(newPrice) || newPrice < 0) return;
-    try {
-      await saveSongToFirestore({ ...song, priceMWK: newPrice });
-      showToast(`Price for "${song.title}" updated to MK ${newPrice.toLocaleString()}`);
-    } catch (err) {
-      showToast('Failed to update price', 'error');
-    }
-  };
-
-  const handleDeleteSong = async (songId: string, songTitle: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${songTitle}" from the store database?`)) {
-      return;
-    }
+  // Delete Song
+  const handleDeleteSong = async (songId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${title}"?`)) return;
     try {
       await deleteSongFromFirestore(songId);
-      showToast(`Track "${songTitle}" deleted from Firestore database`, 'info');
+      showToast(`"${title}" deleted from catalog.`, 'info');
     } catch (err) {
-      showToast('Failed to delete song', 'error');
+      showToast('Could not delete song', 'error');
     }
   };
 
-  const filteredRequests = promoRequests.filter((r) => {
+  // Promotion Request status update
+  const handleUpdatePromoStatus = async (requestId: string, status: 'ACCEPTED' | 'REJECTED') => {
+    try {
+      await updatePromotionRequestStatus(requestId, status);
+      showToast(`Promotion request marked as ${status}.`, 'success');
+    } catch (err) {
+      showToast('Failed to update request', 'error');
+    }
+  };
+
+  // Calculations
+  const totalRevenue = orders
+    .filter((o) => o.status === 'PAID')
+    .reduce((sum, o) => sum + (o.amount || 0), 0);
+  const totalPaidOrders = orders.filter((o) => o.status === 'PAID').length;
+  const pendingSubmissionsCount = submissions.filter((s) => s.status === 'PENDING').length;
+  const unreadMessagesCount = contactMessages.filter((m) => !m.read).length;
+
+  const filteredSubmissions = submissions.filter((s) => {
+    if (submissionFilter === 'ALL') return true;
+    return s.status === submissionFilter;
+  });
+
+  const filteredPromo = promoRequests.filter((r) => {
     if (requestFilter === 'ALL') return true;
     return r.status === requestFilter;
   });
 
   const filteredMessages = contactMessages.filter((m) => {
+    if (messageFilter === 'ALL') return true;
     if (messageFilter === 'UNREAD') return !m.read;
-    if (messageFilter === 'READ') return !!m.read;
-    return true;
+    return m.read;
   });
 
   return (
-    <div className="space-y-6 text-left animate-in fade-in pb-12">
-      {/* Hidden audio element for previews */}
-      <audio ref={audioPreviewRef} onEnded={() => setPlayingRequestId(null)} />
-
-      {/* Top Bar / Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-7 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
+    <div className="space-y-6 text-left animate-in fade-in pb-16">
+      
+      {/* Top Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-950/40">
+          <div className="w-12 h-12 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center justify-center shadow-md">
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-extrabold text-white font-['Syne',sans-serif]">
-                Projects Mandatory Admin Portal
+                Projects Mandatory Administration
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/80 text-emerald-400 text-[10px] font-mono font-bold">
-                Google Auth Verified
+              <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold">
+                SECURE CONSOLE
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Featuring Artist <strong className="text-rose-400">Hapsin</strong> • Signed in as <span className="text-emerald-400 font-mono font-semibold">{adminEmail || 'Verified Administrator'}</span>
+              Admin Session: <strong className="text-slate-200">{adminEmail || 'Administrator'}</strong>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <Button variant="outline" size="sm" onClick={onNavigateStore}>
-            Storefront
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => { logout(); onLogout(); }} leftIcon={<LogOut className="w-3.5 h-3.5" />}>
-            Sign Out
-          </Button>
-        </div>
-      </div>
-
-      {/* Authorized Admins & WhatsApp Hotline Notice Bar */}
-      <div className="px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>
-            Authorized Admin Accounts: <strong className="text-emerald-300 font-mono">alwaysgoodone265@gmail.com</strong>, <strong className="text-emerald-300 font-mono">petedianolabs@gmail.com</strong>
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span>Official WhatsApp:</span>
-          <a
-            href={OFFICIAL_WHATSAPP_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400 font-mono font-bold hover:underline flex items-center gap-1"
+          <button
+            onClick={onNavigateStore}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
           >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>{OFFICIAL_WHATSAPP_NUMBER}</span>
-          </a>
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Storefront</span>
+          </button>
+          <button
+            onClick={() => {
+              logout();
+              onLogout();
+            }}
+            className="px-3.5 py-2 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 text-xs font-bold transition flex items-center gap-1.5"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </div>
 
-      {/* Analytics Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* Metrics Bento Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Total Paid Revenue</span>
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-xs font-semibold">Total Revenue</span>
             <DollarSign className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-xl sm:text-2xl font-black font-mono text-white">
+          <div className="text-xl font-extrabold text-white font-['Syne',sans-serif]">
             MK {totalRevenue.toLocaleString()}
-          </p>
-          <p className="text-[10px] text-emerald-400 font-semibold">{totalSales} verified transactions</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Catalog Tracks</span>
-            <Music className="w-4 h-4 text-blue-400" />
           </div>
-          <p className="text-xl sm:text-2xl font-black font-mono text-white">{songs.length}</p>
-          <p className="text-[10px] text-slate-400">{songs.filter((s) => s.isPublished !== false).length} published live</p>
+          <p className="text-[10px] text-slate-500">{totalPaidOrders} paid transactions</p>
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Promo Requests</span>
-            <Sparkles className="w-4 h-4 text-amber-400" />
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-xs font-semibold">Track Approvals</span>
+            <UploadCloud className="w-4 h-4 text-amber-400" />
           </div>
-          <p className="text-xl sm:text-2xl font-black font-mono text-white">{promoRequests.length}</p>
-          <p className="text-[10px] text-amber-400 font-semibold">{pendingRequestsCount} pending review</p>
+          <div className="text-xl font-extrabold text-amber-400 font-['Syne',sans-serif]">
+            {pendingSubmissionsCount} Pending
+          </div>
+          <p className="text-[10px] text-slate-500">{submissions.length} total artist submissions</p>
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Customer Messages</span>
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-xs font-semibold">Registered Artists</span>
+            <Users className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div className="text-xl font-extrabold text-white font-['Syne',sans-serif]">
+            {artists.length}
+          </div>
+          <p className="text-[10px] text-indigo-400">70/30 split enabled</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
+          <div className="flex justify-between items-center text-slate-400">
+            <span className="text-xs font-semibold">User Inquiries</span>
             <MessageSquare className="w-4 h-4 text-rose-400" />
           </div>
-          <p className="text-xl sm:text-2xl font-black font-mono text-white">{contactMessages.length}</p>
-          <p className="text-[10px] text-rose-400 font-semibold">{unreadMessagesCount} unread submissions</p>
+          <div className="text-xl font-extrabold text-white font-['Syne',sans-serif]">
+            {unreadMessagesCount} Unread
+          </div>
+          <p className="text-[10px] text-slate-500">{contactMessages.length} total messages</p>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Tabs Bar */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('songs')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap ${
-            activeTab === 'songs'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          <Music className="w-4 h-4" />
-          <span>Music Catalog ({songs.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('requests')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap ${
-            activeTab === 'requests'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>Promotion Requests</span>
-          {pendingRequestsCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-amber-300 text-slate-950 rounded-full text-[10px] font-black">
-              {pendingRequestsCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('messages')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap ${
-            activeTab === 'messages'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-900/40'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>Customer Messages</span>
-          {unreadMessagesCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-rose-400 text-white rounded-full text-[10px] font-black">
-              {unreadMessagesCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap ${
-            activeTab === 'orders'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span>Orders & Payments ({orders.length})</span>
-        </button>
+        {[
+          { id: 'submissions', label: `Artist Approvals (${pendingSubmissionsCount})`, icon: UploadCloud, badge: pendingSubmissionsCount > 0 },
+          { id: 'artists', label: `Artists & Payouts (${artists.length})`, icon: Users },
+          { id: 'songs', label: `Live Catalog (${songs.length})`, icon: Music },
+          { id: 'messages', label: `Contact Inquiries (${unreadMessagesCount})`, icon: MessageSquare, badge: unreadMessagesCount > 0 },
+          { id: 'requests', label: `Promote Requests (${promoRequests.length})`, icon: Sparkles },
+          { id: 'orders', label: `Sales Orders (${orders.length})`, icon: ShoppingCart },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as AdminTab)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                isActive
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/40'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+              {tab.badge && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* TAB 1: MUSIC CATALOG */}
-      {activeTab === 'songs' && (
+      {/* TAB 1: ARTIST SONG SUBMISSIONS & APPROVALS */}
+      {activeTab === 'submissions' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white font-['Syne',sans-serif]">
-                Song Catalog & Master Files
-              </h2>
+              <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+                Artist Track Submissions & Publishing Pipeline
+              </h3>
               <p className="text-xs text-slate-400">
-                Manage high-fidelity masters in Firebase Cloud Storage and pricing in MWK.
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleOpenAddModal}
-              leftIcon={<Plus className="w-4 h-4" />}
-            >
-              Upload New Track
-            </Button>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase font-bold tracking-wider text-[10px] border-b border-slate-800">
-                  <tr>
-                    <th className="p-3">Track Info</th>
-                    <th className="p-3">Artist</th>
-                    <th className="p-3">Genre</th>
-                    <th className="p-3">Price (MWK)</th>
-                    <th className="p-3">Storage Status</th>
-                    <th className="p-3">Publish</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {songs.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500">
-                        {isLoading ? 'Loading catalog from Firestore...' : 'No songs uploaded yet. Click "Upload New Track" above!'}
-                      </td>
-                    </tr>
-                  ) : (
-                    songs.map((song) => (
-                      <tr key={song.id} className="hover:bg-slate-800/40 transition">
-                        <td className="p-3">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={song.coverImage}
-                              alt={song.title}
-                              className="w-10 h-10 rounded-lg object-cover bg-slate-800 shrink-0 border border-slate-700"
-                            />
-                            <div>
-                              <div className="font-bold text-white text-sm flex items-center gap-1.5">
-                                <span>{song.title}</span>
-                                {song.isLatest && (
-                                  <span className="px-1.5 py-0.2 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[9px] font-bold">
-                                    NEW
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-slate-400">{song.releaseDate}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-semibold text-slate-200">{song.artist}</span>
-                          {song.featuredArtists && (
-                            <span className="text-slate-400 text-[11px] block">ft. {song.featuredArtists}</span>
-                          )}
-                        </td>
-                        <td className="p-3 font-medium text-slate-300">{song.genre}</td>
-                        <td className="p-3">
-                          <input
-                            type="number"
-                            defaultValue={song.priceMWK}
-                            onBlur={(e) => handleQuickPriceUpdate(song, Number(e.target.value))}
-                            className="w-20 px-2 py-1 bg-slate-950 border border-slate-700 rounded text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500"
-                          />
-                        </td>
-                        <td className="p-3">
-                          {song.audioFilePath ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                              <CheckCircle2 className="w-3 h-3" /> Master Ready
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
-                              <AlertCircle className="w-3 h-3" /> No Audio File
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleTogglePublish(song)}
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase transition flex items-center gap-1 ${
-                              song.isPublished !== false
-                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'
-                                : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
-                            }`}
-                          >
-                            {song.isPublished !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                            <span>{song.isPublished !== false ? 'Live' : 'Hidden'}</span>
-                          </button>
-                        </td>
-                        <td className="p-3 text-right space-x-1">
-                          <button
-                            onClick={() => handleOpenEditModal(song)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white"
-                            title="Edit Track"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSong(song.id, song.title)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400"
-                            title="Delete Track"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: PROMOTION REQUESTS */}
-      {activeTab === 'requests' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white font-['Syne',sans-serif]">
-                Music Promotion Submissions
-              </h2>
-              <p className="text-xs text-slate-400">
-                Review submissions from independent artists. Accept to immediately add them to the catalog.
+                Review master audio tracks submitted by artists. Capped at MK 5,000 max with 70% artist payout split.
               </p>
             </div>
 
             {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start">
-              {(['ALL', 'PENDING', 'ACCEPTED', 'REJECTED'] as const).map((filter) => (
+            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+              {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((filter) => (
                 <button
                   key={filter}
-                  onClick={() => setRequestFilter(filter)}
+                  onClick={() => setSubmissionFilter(filter)}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                    requestFilter === filter
-                      ? 'bg-slate-800 text-white border border-slate-700'
+                    submissionFilter === filter
+                      ? 'bg-rose-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -784,192 +563,132 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
           </div>
 
-          {filteredRequests.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
-              <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-sm font-semibold text-white">No promotion requests matching &quot;{requestFilter}&quot;</p>
-              <p className="text-xs text-slate-500">
-                Artists can submit their music via the &quot;Promote Music&quot; link on the storefront.
-              </p>
+          {filteredSubmissions.length === 0 ? (
+            <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-2">
+              <UploadCloud className="w-10 h-10 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-400">No submissions matching current filter.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {filteredRequests.map((req) => {
-                const isPlaying = playingRequestId === req.id;
-                const isBusy = isProcessingRequest === req.id;
-                const rawPhone = req.whatsapp || req.phone;
-                const waLink = rawPhone ? getCleanWhatsAppLink(rawPhone) : '';
+            <div className="space-y-3.5">
+              {filteredSubmissions.map((sub) => {
+                const isPlaying = playingAudioUrl === sub.audioFilePath;
+                const isProcessing = processingSubmissionId === sub.id;
 
                 return (
                   <div
-                    key={req.id}
-                    className="p-5 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-lg hover:border-slate-700/80 transition"
+                    key={sub.id}
+                    className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl hover:border-slate-700 transition"
                   >
-                    {/* Header: Cover + Title + Status */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3.5">
-                        {req.coverImage ? (
-                          <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700 shadow-md">
-                            <img src={req.coverImage} alt={req.songTitle} className="w-full h-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="w-16 h-16 rounded-xl bg-slate-950 flex items-center justify-center text-slate-500 shrink-0">
-                            <Music className="w-6 h-6" />
-                          </div>
-                        )}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0 group">
+                          <img src={sub.coverImage} alt={sub.title} className="w-full h-full object-cover" />
+                          {sub.audioFilePath && (
+                            <button
+                              onClick={() => handleTogglePlayAudio(sub.audioFilePath)}
+                              className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                              title="Listen to master audio"
+                            >
+                              {isPlaying ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white" />}
+                            </button>
+                          )}
+                        </div>
 
                         <div>
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                req.status === 'ACCEPTED'
-                                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80'
-                                  : req.status === 'REJECTED'
-                                  ? 'bg-rose-950/80 text-rose-400 border border-rose-800/80'
-                                  : 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
-                              }`}
-                            >
-                              {req.status}
-                            </span>
-                            <span className="text-xs text-slate-400 font-mono">{req.genre}</span>
-                            <span className="text-[11px] text-slate-500">• Submitted {req.createdAt?.split('T')[0]}</span>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-base font-extrabold text-white">{sub.title}</h4>
+                            <span className="text-xs text-slate-400">by <strong className="text-rose-400">{sub.artistName}</strong></span>
+                            {sub.featuredArtists && (
+                              <span className="text-xs text-slate-400">({sub.featuredArtists})</span>
+                            )}
                           </div>
-
-                          <h3 className="text-base sm:text-lg font-bold text-white">
-                            {req.songTitle}
-                          </h3>
-                          <p className="text-xs text-slate-300">
-                            By <strong className="text-rose-400">{req.artistName}</strong>
-                            {req.featuredArtists && <span className="text-slate-400"> ({req.featuredArtists})</span>}
-                          </p>
+                          <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
+                            <span>Genre: <strong>{sub.genre}</strong></span>
+                            <span>•</span>
+                            <span>Phone: <strong className="text-slate-300">{sub.artistPhone}</strong></span>
+                            <span>•</span>
+                            <span>Format: <strong>{sub.fileFormat || 'Studio Master'}</strong></span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Proposed Price */}
-                      <div className="bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 text-left sm:text-right shrink-0">
-                        <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Proposed Store Price</span>
-                        <span className="text-sm font-black font-mono text-emerald-400">
-                          {req.proposedPriceMWK ? `MK ${req.proposedPriceMWK.toLocaleString()}` : 'Free Promo'}
-                        </span>
+                      {/* Status Tag */}
+                      <div>
+                        {sub.status === 'PENDING' && (
+                          <span className="px-3 py-1 rounded-full bg-amber-950 text-amber-400 border border-amber-500/40 text-xs font-bold">
+                            PENDING REVIEW
+                          </span>
+                        )}
+                        {sub.status === 'APPROVED' && (
+                          <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 text-xs font-bold">
+                            APPROVED & PUBLISHED
+                          </span>
+                        )}
+                        {sub.status === 'REJECTED' && (
+                          <span className="px-3 py-1 rounded-full bg-rose-950 text-rose-400 border border-rose-500/40 text-xs font-bold">
+                            REJECTED
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Audio Player / Stream Link */}
-                    {(req.audioFilePath || req.streamUrl) && (
-                      <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <button
-                            onClick={() => handleTogglePlayAudio(req.id, req.audioFilePath || req.streamUrl)}
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition shrink-0 ${
-                              isPlaying
-                                ? 'bg-amber-500 text-slate-950 shadow-md'
-                                : 'bg-slate-800 text-white hover:bg-slate-700'
-                            }`}
-                            title={isPlaying ? 'Pause Audio' : 'Play Audio Preview'}
-                          >
-                            {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                          </button>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-white truncate">
-                              {req.audioFileName || 'Master Audio Recording'}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {isPlaying ? 'Playing in browser...' : 'Click to preview submitted track'}
-                            </p>
-                          </div>
+                    {/* Price & 70/30 Split Card */}
+                    <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <span className="text-slate-500 block text-[10px]">Track Price</span>
+                          <span className="font-extrabold text-white text-sm">MK {sub.priceMWK.toLocaleString()}</span>
                         </div>
-
-                        {req.streamUrl && (
-                          <a
-                            href={req.streamUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 shrink-0 font-medium"
-                          >
-                            <span>External Stream</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Description or Notes */}
-                    {req.description && (
-                      <p className="text-xs text-slate-300 bg-slate-950/40 p-3 rounded-xl border border-slate-800/60 leading-relaxed">
-                        <strong className="text-slate-400">Story/Notes:</strong> {req.description}
-                      </p>
-                    )}
-
-                    {/* Admin notes if reviewed */}
-                    {req.adminNotes && (
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-amber-300">
-                        <strong className="text-slate-400">Admin Review Notes:</strong> {req.adminNotes}
-                      </div>
-                    )}
-
-                    {/* Contact details & Action Controls */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
-                      {/* Contact Badges */}
-                      <div className="flex items-center gap-2 flex-wrap text-xs text-slate-300">
-                        {rawPhone && (
-                          <a
-                            href={`tel:${rawPhone}`}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-1.5 transition"
-                          >
-                            <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{rawPhone}</span>
-                          </a>
-                        )}
-
-                        {waLink && (
-                          <a
-                            href={waLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 hover:bg-emerald-900/60 flex items-center gap-1.5 transition font-semibold"
-                            title="Open WhatsApp Chat (No auto-filled message)"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>WhatsApp Chat</span>
-                          </a>
-                        )}
+                        <div className="border-l border-slate-800 pl-4">
+                          <span className="text-slate-500 block text-[10px]">Artist Net Share (70%)</span>
+                          <span className="font-bold text-emerald-400 text-sm">MK {sub.artistShareMWK.toLocaleString()}</span>
+                        </div>
+                        <div className="border-l border-slate-800 pl-4">
+                          <span className="text-slate-500 block text-[10px]">Platform Share (30%)</span>
+                          <span className="font-bold text-slate-300 text-sm">MK {sub.platformShareMWK.toLocaleString()}</span>
+                        </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-2">
-                        {req.status !== 'ACCEPTED' && (
-                          <Button
-                            variant="success"
-                            size="sm"
-                            isLoading={isBusy}
-                            onClick={() => handleAcceptRequest(req)}
-                            leftIcon={<Check className="w-3.5 h-3.5" />}
-                          >
-                            Accept & Publish
-                          </Button>
-                        )}
-
-                        {req.status === 'PENDING' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            isLoading={isBusy}
-                            onClick={() => handleRejectRequest(req.id, req.artistName)}
-                            leftIcon={<X className="w-3.5 h-3.5" />}
-                          >
-                            Reject
-                          </Button>
-                        )}
-
+                      {/* Direct Audio Player */}
+                      {sub.audioFilePath && (
                         <button
-                          onClick={() => handleDeleteRequest(req.id, req.songTitle)}
-                          className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-700 transition"
-                          title="Delete Request"
+                          onClick={() => handleTogglePlayAudio(sub.audioFilePath)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+                            isPlaying
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                          }`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          <span>{isPlaying ? 'Pause Audio' : 'Play Master Audio'}</span>
                         </button>
-                      </div>
+                      )}
                     </div>
+
+                    {/* Action Controls */}
+                    {sub.status === 'PENDING' && (
+                      <div className="flex items-center justify-end gap-2.5 pt-1">
+                        <button
+                          onClick={() => setRejectModalSubmission(sub)}
+                          disabled={isProcessing}
+                          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 text-xs font-bold transition flex items-center gap-1.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject with Feedback</span>
+                        </button>
+
+                        <Button
+                          variant="success"
+                          size="sm"
+                          isLoading={isProcessing}
+                          onClick={() => handleApproveSubmission(sub)}
+                          className="px-5 py-2 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-emerald-950/60"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve & Publish to Store</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -978,449 +697,551 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
       )}
 
-      {/* TAB 3: CUSTOMER MESSAGES */}
-      {activeTab === 'messages' && (
+      {/* TAB 2: ARTISTS & PAYOUTS */}
+      {activeTab === 'artists' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white font-['Syne',sans-serif]">
-                Website Contact Messages
-              </h2>
+              <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+                Registered Artists Directory & Mobile Payouts
+              </h3>
               <p className="text-xs text-slate-400">
-                Direct messages submitted by clients and visitors on the website contact form.
+                Track artist wallet balances, direct fan tips received, and disburse 70% earnings via Airtel Money & Mpamba.
               </p>
             </div>
+          </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start">
-              {(['ALL', 'UNREAD', 'READ'] as const).map((filter) => (
+          {artists.length === 0 ? (
+            <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-2">
+              <Users className="w-10 h-10 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-400">No artist profiles registered in Firestore yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {artists.map((artist) => (
+                <div
+                  key={artist.id}
+                  className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border-2 border-rose-500/40 shrink-0">
+                      <img src={artist.avatarUrl} alt={artist.artistName} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-base font-bold text-white">{artist.artistName}</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 font-bold border border-emerald-500/40">
+                          {artist.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {artist.email} • {artist.phone}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Financial Stats */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Total Earned (70%)</span>
+                      <span className="font-extrabold text-emerald-400">
+                        MK {(artist.wallet?.totalEarnedMWK || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Pending Payout</span>
+                      <span className="font-extrabold text-amber-400">
+                        MK {(artist.wallet?.pendingPayoutMWK || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Disbursed So Far</span>
+                      <span className="font-extrabold text-slate-300">
+                        MK {(artist.wallet?.totalPaidOutMWK || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payout Details */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Payout Method:</span>
+                      <span className="font-bold text-white">{artist.payoutDetails?.accountType || 'AIRTEL_MONEY'}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Account / SIM Number:</span>
+                      <span className="font-bold text-emerald-400">{artist.payoutDetails?.accountNumber || artist.phone}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Registered Name:</span>
+                      <span className="font-bold text-white">{artist.payoutDetails?.accountName || artist.artistName}</span>
+                    </div>
+                  </div>
+
+                  {/* Payout Action */}
+                  <div className="pt-1 flex items-center justify-between">
+                    <a
+                      href={`https://wa.me/265${artist.phone.replace(/[^0-9]/g, '').replace(/^0/, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>WhatsApp Artist</span>
+                    </a>
+
+                    <button
+                      onClick={() => {
+                        setSelectedArtistForPayout(artist);
+                        setPayoutAmount(artist.wallet?.pendingPayoutMWK || 0);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Record Mobile Payout</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: SONGS CATALOG (Add/Edit) */}
+      {activeTab === 'songs' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+              Live Store Catalog ({songs.length})
+            </h3>
+            <button
+              onClick={() => handleOpenSongModal()}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-rose-950/40"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Track</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {songs.map((song) => (
+              <div
+                key={song.id}
+                className="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3 flex flex-col justify-between shadow-xl"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700">
+                      <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white line-clamp-1">{song.title}</h4>
+                      <p className="text-xs text-rose-400 font-semibold">{song.artist}</p>
+                      <span className="text-xs text-emerald-400 font-bold">MK {song.priceMWK.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 space-y-0.5">
+                    <div>Format: <strong>{song.fileFormat}</strong></div>
+                    <div>Downloads: <strong>{song.downloadCount || 0}</strong></div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => handleTogglePublish(song)}
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition ${
+                      song.isPublished
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {song.isPublished ? 'Published' : 'Draft'}
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenSongModal(song)}
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+                      title="Edit Track"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSong(song.id, song.title)}
+                      className="p-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-400 transition"
+                      title="Delete Track"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: CONTACT MESSAGES */}
+      {activeTab === 'messages' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+              Website Contact Messages ({contactMessages.length})
+            </h3>
+            <div className="flex gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+              {(['ALL', 'UNREAD', 'READ'] as const).map((f) => (
                 <button
-                  key={filter}
-                  onClick={() => setMessageFilter(filter)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                    messageFilter === filter
-                      ? 'bg-slate-800 text-white border border-slate-700'
-                      : 'text-slate-400 hover:text-white'
+                  key={f}
+                  onClick={() => setMessageFilter(f)}
+                  className={`px-3 py-1 rounded-lg font-bold transition ${
+                    messageFilter === f ? 'bg-rose-600 text-white' : 'text-slate-400'
                   }`}
                 >
-                  {filter}
+                  {f}
                 </button>
               ))}
             </div>
           </div>
 
           {filteredMessages.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
-              <MessageSquare className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-sm font-semibold text-white">No messages matching &quot;{messageFilter}&quot;</p>
-              <p className="text-xs text-slate-500">
-                When visitors write messages on the Contact page, they will appear here in real-time.
-              </p>
+            <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
+              No messages found.
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredMessages.map((msg) => {
-                const waLink = getCleanWhatsAppLink(msg.phoneOrWhatsApp);
-
-                return (
-                  <div
-                    key={msg.id}
-                    className={`p-5 rounded-2xl bg-slate-900 border transition shadow-md space-y-3 ${
-                      !msg.read ? 'border-rose-500/50 bg-slate-900/90' : 'border-slate-800'
-                    }`}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        {!msg.read ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-950 text-rose-400 border border-rose-800">
-                            NEW
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-800 text-slate-400">
-                            READ
-                          </span>
-                        )}
-                        <h3 className="font-bold text-white text-sm sm:text-base">{msg.name}</h3>
-                        <span className="text-xs text-slate-400 font-mono">({msg.phoneOrWhatsApp})</span>
-                      </div>
-
-                      <span className="text-[11px] text-slate-500 font-mono">
-                        {msg.createdAt ? new Date(msg.createdAt).toLocaleString() : 'Recent'}
-                      </span>
+              {filteredMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-4 rounded-2xl border transition space-y-2 ${
+                    !msg.read
+                      ? 'bg-slate-900 border-rose-500/40 shadow-lg'
+                      : 'bg-slate-950 border-slate-800'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-sm font-bold text-white">{msg.name}</span>
+                      <span className="text-xs text-slate-400 ml-2 font-mono">{msg.phoneOrWhatsApp}</span>
                     </div>
+                    <span className="text-[10px] text-slate-500">{new Date(msg.createdAt).toLocaleString()}</span>
+                  </div>
 
-                    {msg.subject && (
-                      <p className="text-xs font-semibold text-slate-200">
-                        Subject: <span className="text-rose-400">{msg.subject}</span>
-                      </p>
-                    )}
+                  <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    {msg.message}
+                  </p>
 
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
-                      {msg.message}
-                    </div>
+                  <div className="flex justify-between items-center pt-1">
+                    <a
+                      href={`https://wa.me/265${msg.phoneOrWhatsApp.replace(/[^0-9]/g, '').replace(/^0/, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Reply on WhatsApp</span>
+                    </a>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-                      <div className="flex items-center gap-2">
-                        {/* Direct WhatsApp chat button */}
-                        <a
-                          href={waLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/70 border border-emerald-800/80 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition"
-                          title="Open WhatsApp chat with user (no auto-filled message)"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Chat on WhatsApp ({msg.phoneOrWhatsApp})</span>
-                        </a>
-
-                        <a
-                          href={`tel:${msg.phoneOrWhatsApp}`}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-blue-400" />
-                          <span>Call</span>
-                        </a>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleMessageRead(msg)}
-                          leftIcon={msg.read ? <MailCheck className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
-                        >
-                          {msg.read ? 'Mark as Unread' : 'Mark as Read'}
-                        </Button>
-
-                        <button
-                          onClick={() => handleDeleteMessage(msg.id)}
-                          className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-700 transition"
-                          title="Delete Message"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => markContactMessageRead(msg.id, !msg.read)}
+                        className="text-xs text-slate-400 hover:text-white px-2 py-1"
+                      >
+                        {msg.read ? 'Mark Unread' : 'Mark Read'}
+                      </button>
+                      <button
+                        onClick={() => deleteContactMessage(msg.id)}
+                        className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 4: ORDERS & PAYMENTS */}
+      {/* TAB 5: GENERAL PROMOTION REQUESTS */}
+      {activeTab === 'requests' && (
+        <div className="space-y-4">
+          <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+            General Music Promotion Requests ({promoRequests.length})
+          </h3>
+          <div className="space-y-3">
+            {promoRequests.map((req) => (
+              <div key={req.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-sm font-bold text-white">{req.songTitle}</h4>
+                    <span className="text-xs text-slate-400">by {req.artistName} ({req.phone})</span>
+                  </div>
+                  <Badge variant={req.status === 'ACCEPTED' ? 'success' : req.status === 'REJECTED' ? 'error' : 'warning'}>
+                    {req.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-300">{req.description}</p>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button size="sm" variant="success" onClick={() => handleUpdatePromoStatus(req.id, 'ACCEPTED')}>
+                    Accept
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleUpdatePromoStatus(req.id, 'REJECTED')}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: ORDERS & SALES */}
       {activeTab === 'orders' && (
         <div className="space-y-4">
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-white font-['Syne',sans-serif]">
-              PayChangu Orders & Download Ledger
-            </h2>
-            <p className="text-xs text-slate-400">
-              Live mobile money (Airtel Money, TNM Mpamba) & card transactions from Firestore `orders`.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/80 text-slate-400 uppercase font-bold tracking-wider text-[10px] border-b border-slate-800">
+          <h3 className="text-base font-bold text-white font-['Syne',sans-serif]">
+            Customer Purchases & Order Ledger ({orders.length})
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left text-slate-300 border border-slate-800 rounded-2xl overflow-hidden">
+              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px]">
                 <tr>
-                  <th className="p-3">Reference</th>
-                  <th className="p-3">Customer</th>
                   <th className="p-3">Track</th>
+                  <th className="p-3">Customer</th>
                   <th className="p-3">Amount</th>
                   <th className="p-3">Status</th>
                   <th className="p-3">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
-                {orders.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500 font-sans">
-                      No customer orders yet. Verified transactions will appear here in real-time.
+              <tbody className="divide-y divide-slate-800">
+                {orders.map((order) => (
+                  <tr key={order.id} className="bg-slate-900/60 hover:bg-slate-900">
+                    <td className="p-3 font-bold text-white">{order.songTitle}</td>
+                    <td className="p-3">{order.customerEmail}</td>
+                    <td className="p-3 font-bold text-emerald-400">MK {order.amount.toLocaleString()}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        order.status === 'PAID' ? 'bg-emerald-950 text-emerald-400' : 'bg-amber-950 text-amber-400'
+                      }`}>
+                        {order.status}
+                      </span>
                     </td>
+                    <td className="p-3 text-slate-500">{new Date(order.createdAt).toLocaleDateString()}</td>
                   </tr>
-                ) : (
-                  orders.map((ord) => (
-                    <tr key={ord.id} className="hover:bg-slate-800/40 transition">
-                      <td className="p-3 font-bold text-white">{ord.txRef}</td>
-                      <td className="p-3">
-                        <div className="font-sans font-semibold text-slate-200">{ord.customerName}</div>
-                        <div className="text-[11px] text-slate-400">{ord.customerEmail}</div>
-                        <div className="text-[11px] text-slate-500">{ord.customerPhone}</div>
-                      </td>
-                      <td className="p-3 font-sans font-medium text-slate-200">{ord.songTitle}</td>
-                      <td className="p-3 font-bold text-white">MK {ord.amount.toLocaleString()}</td>
-                      <td className="p-3">
-                        <Badge variant={ord.status === 'PAID' ? 'success' : 'warning'} size="sm">
-                          {ord.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-slate-400 text-[11px]">{ord.createdAt?.split('T')[0]}</td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* MODAL: UPLOAD MASTER AUDIO & COVER ARTWORK */}
+      {/* MODAL: ADD / EDIT SONG */}
       {isModalOpen && editingSong && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in overflow-y-auto">
-          <div className="w-full max-w-xl rounded-3xl bg-slate-900 border border-slate-700 p-5 sm:p-7 shadow-2xl relative text-left my-4 max-h-[92vh] overflow-y-auto">
-            <button
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingSong(null);
-              }}
-              className="absolute top-4 right-4 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl bg-slate-800"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-1 font-['Syne',sans-serif]">
-              {editingSong.title ? `Edit "${editingSong.title}"` : 'Upload New Studio Track'}
-            </h3>
-            <p className="text-xs text-slate-400 mb-5">
-              Upload your audio master file and artwork to Firebase Cloud Storage.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white font-['Syne',sans-serif]">
+                {editingSong.id ? 'Edit Master Track' : 'Add New Master Track'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleSaveSong} className="space-y-4">
-              
-              {/* 1. AUDIO MASTER FILE UPLOADER */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileAudio className="w-4 h-4 text-rose-500" />
-                    <span>1. Studio Audio Master File (MP3 / WAV / FLAC)</span>
-                  </label>
-                  {audioUploadSuccess && (
-                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Uploaded to Storage
-                    </span>
-                  )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Track Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSong.title || ''}
+                    onChange={(e) => setEditingSong({ ...editingSong, title: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+                  />
                 </div>
-
-                <input
-                  type="file"
-                  ref={audioInputRef}
-                  onChange={handleAudioSelect}
-                  accept=".mp3,.wav,.flac,.m4a,.aac"
-                  className="hidden"
-                />
-
-                <div
-                  onClick={() => audioInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-700 hover:border-rose-500/80 rounded-xl p-4 text-center cursor-pointer transition bg-slate-900/50 hover:bg-slate-900"
-                >
-                  <UploadCloud className="w-6 h-6 text-rose-400 mx-auto mb-1.5" />
-                  <p className="text-xs font-semibold text-slate-200">
-                    {audioFile ? audioFile.name : editingSong.audioFileName || 'Click to select studio master audio file'}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Supports high fidelity 320kbps MP3, 24-bit WAV, FLAC (stored in Firebase Cloud Storage)
-                  </p>
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Artist Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSong.artist || 'Hapsin'}
+                    onChange={(e) => setEditingSong({ ...editingSong, artist: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+                  />
                 </div>
-
-                {audioUploadProgress !== null && audioUploadProgress < 100 && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Uploading to Firebase Cloud Storage...</span>
-                      <span>{audioUploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-rose-600 h-full transition-all duration-300"
-                        style={{ width: `${audioUploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* 2. COVER ARTWORK UPLOADER */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <ImageIcon className="w-4 h-4 text-blue-400" />
-                    <span>2. Cover Artwork Image</span>
-                  </label>
-                  {editingSong.coverImage && (
-                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Ready
-                    </span>
-                  )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Genre</label>
+                  <input
+                    type="text"
+                    value={editingSong.genre || 'Afro-fusion'}
+                    onChange={(e) => setEditingSong({ ...editingSong, genre: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+                  />
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Price (MWK - max 5,000)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5000"
+                    step="100"
+                    value={editingSong.priceMWK || 1500}
+                    onChange={(e) => setEditingSong({ ...editingSong, priceMWK: Math.min(5000, parseInt(e.target.value, 10) || 0) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+                  />
+                </div>
+              </div>
 
+              {/* Master Audio Upload */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <label className="text-xs font-bold text-white flex items-center gap-2">
+                  <FileAudio className="w-4 h-4 text-rose-500" />
+                  <span>Attach Studio Audio Master (MP3 / WAV)</span>
+                </label>
                 <input
                   type="file"
-                  ref={coverInputRef}
-                  onChange={handleCoverSelect}
+                  accept="audio/*,.mp3,.wav,.flac"
+                  onChange={(e) => setAudioFile(e.target.files ? e.target.files[0] : null)}
+                  className="w-full text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-rose-600 file:text-white file:cursor-pointer"
+                />
+              </div>
+
+              {/* Cover Art Upload */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <label className="text-xs font-bold text-white flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-indigo-400" />
+                  <span>Attach Single Artwork</span>
+                </label>
+                <input
+                  type="file"
                   accept="image/*"
-                  className="hidden"
-                />
-
-                <div className="flex items-center gap-4">
-                  <div
-                    onClick={() => coverInputRef.current?.click()}
-                    className="w-20 h-20 rounded-xl overflow-hidden bg-slate-900 border-2 border-dashed border-slate-700 hover:border-blue-500 shrink-0 cursor-pointer flex items-center justify-center transition"
-                  >
-                    {coverPreviewUrl || editingSong.coverImage ? (
-                      <img
-                        src={coverPreviewUrl || editingSong.coverImage}
-                        alt="Cover preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <UploadCloud className="w-6 h-6 text-slate-500" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      onClick={() => coverInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 mb-1"
-                    >
-                      Choose Cover Image
-                    </button>
-                    <p className="text-[10px] text-slate-400">
-                      Square ratio recommended (e.g. 1000x1000 JPG / PNG / WebP)
-                    </p>
-                  </div>
-                </div>
-
-                {coverUploadProgress !== null && coverUploadProgress < 100 && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-slate-400">
-                      <span>Uploading artwork...</span>
-                      <span>{coverUploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-blue-600 h-full transition-all duration-300"
-                        style={{ width: `${coverUploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 3. TRACK METADATA & PRICING */}
-              <Input
-                label="Track Title"
-                placeholder="e.g. Mandatory Soul"
-                value={editingSong.title || ''}
-                onChange={(e) => setEditingSong({ ...editingSong, title: e.target.value })}
-                required
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Artist Stage Name"
-                  placeholder="Hapsin"
-                  value={editingSong.artist || 'Hapsin'}
-                  onChange={(e) => setEditingSong({ ...editingSong, artist: e.target.value })}
-                  required
-                />
-                <Input
-                  label="Price in Malawi Kwacha (MWK)"
-                  type="number"
-                  placeholder="1500"
-                  value={editingSong.priceMWK || ''}
-                  onChange={(e) => setEditingSong({ ...editingSong, priceMWK: Number(e.target.value) })}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Genre"
-                  placeholder="Afro-fusion, Pop"
-                  value={editingSong.genre || ''}
-                  onChange={(e) => setEditingSong({ ...editingSong, genre: e.target.value })}
-                  required
-                />
-                <Input
-                  label="Featured Artists"
-                  placeholder="Optional"
-                  value={editingSong.featuredArtists || ''}
-                  onChange={(e) => setEditingSong({ ...editingSong, featuredArtists: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Track Description & Liner Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={editingSong.description || ''}
-                  onChange={(e) => setEditingSong({ ...editingSong, description: e.target.value })}
-                  placeholder="Inspiration, backstory..."
-                  className="w-full rounded-lg bg-slate-950 border border-slate-700/80 text-slate-100 text-xs sm:text-sm p-3 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Toggles */}
-              <div className="flex flex-wrap items-center gap-4 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={editingSong.isPublished !== false}
-                    onChange={(e) => setEditingSong({ ...editingSong, isPublished: e.target.checked })}
-                    className="rounded border-slate-700 bg-slate-950 text-emerald-600 focus:ring-0"
-                  />
-                  <span>Published in Store</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={!!editingSong.isLatest}
-                    onChange={(e) => setEditingSong({ ...editingSong, isLatest: e.target.checked })}
-                    className="rounded border-slate-700 bg-slate-950 text-rose-600 focus:ring-0"
-                  />
-                  <span>Latest Release</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={!!editingSong.isFeatured}
-                    onChange={(e) => setEditingSong({ ...editingSong, isFeatured: e.target.checked })}
-                    className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0"
-                  />
-                  <span>Featured Track</span>
-                </label>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditingSong(null);
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setCoverFile(e.target.files[0]);
+                      setCoverPreviewUrl(URL.createObjectURL(e.target.files[0]));
+                    }
                   }}
-                  className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="min-h-[44px] px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition flex items-center gap-2"
-                >
-                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{isSaving ? 'Saving to Database...' : 'Save & Publish Track'}</span>
-                </button>
+                  className="w-full text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white file:cursor-pointer"
+                />
               </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                isLoading={isSaving}
+                className="w-full font-bold text-xs uppercase py-3.5 bg-rose-600 hover:bg-rose-500"
+              >
+                Save Track to Live Catalog
+              </Button>
             </form>
           </div>
         </div>
       )}
+
+      {/* MODAL: REJECT SUBMISSION WITH FEEDBACK */}
+      {rejectModalSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">
+              Reject Submission: &quot;{rejectModalSubmission.title}&quot;
+            </h3>
+            <p className="text-xs text-slate-400">
+              Provide constructive feedback to {rejectModalSubmission.artistName} on why the track requires revision.
+            </p>
+            <textarea
+              rows={3}
+              placeholder="e.g. Master track has audio distortion. Please re-export in 320kbps."
+              value={rejectFeedback}
+              onChange={(e) => setRejectFeedback(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRejectModalSubmission(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmReject}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+              >
+                Send Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DISBURSE PAYOUT */}
+      {selectedArtistForPayout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <form onSubmit={handleDisbursePayout} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">
+              Record Payout for {selectedArtistForPayout.artistName}
+            </h3>
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Pending Balance:</span>
+                <span className="font-bold text-emerald-400">MK {(selectedArtistForPayout.wallet?.pendingPayoutMWK || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Target Account:</span>
+                <span className="font-bold text-white">{selectedArtistForPayout.payoutDetails?.accountNumber || selectedArtistForPayout.phone}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Disbursed Amount (MWK) *</label>
+              <input
+                type="number"
+                required
+                min="1"
+                value={payoutAmount}
+                onChange={(e) => setPayoutAmount(parseInt(e.target.value, 10) || 0)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Transaction Ref / Notes</label>
+              <input
+                type="text"
+                placeholder="e.g. Airtel Money Trans Ref #1294819"
+                value={payoutNotes}
+                onChange={(e) => setPayoutNotes(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedArtistForPayout(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-300"
+              >
+                Cancel
+              </button>
+              <Button
+                type="submit"
+                variant="success"
+                isLoading={isProcessingPayout}
+                className="px-5 py-2 font-bold text-xs"
+              >
+                Confirm Payout Disbursed
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
     </div>
   );
 };

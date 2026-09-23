@@ -4,10 +4,10 @@ import { api } from './lib/api';
 import {
   subscribePublishedSongs,
   subscribeArtistSettings,
-  seedInitialDataIfEmpty,
 } from './lib/firebase';
 import { AuthProvider } from './context/AuthContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
+import { ArtistProvider } from './context/ArtistContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
@@ -30,6 +30,9 @@ import { PrivacyPage, TermsPage } from './pages/LegalPages';
 import { PromoteMusicPage } from './pages/PromoteMusicPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { ArtistStudioPage } from './pages/artist/ArtistStudioPage';
+import { ArtistsListPage } from './pages/artist/ArtistsListPage';
+import { ArtistProfilePage } from './pages/artist/ArtistProfilePage';
 
 function AppContent() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
@@ -141,6 +144,18 @@ function AppContent() {
     return undefined;
   };
 
+  // Detect artist URL parameter or route
+  const getArtistIdFromRoute = (): string | null => {
+    const matchArtist = currentPath.match(/\/artist\/([a-zA-Z0-9_-]+)/);
+    if (matchArtist && matchArtist[1] !== 'studio') {
+      return matchArtist[1];
+    }
+    const params = new URLSearchParams(window.location.search);
+    const queryArtist = params.get('artist');
+    if (queryArtist) return queryArtist;
+    return null;
+  };
+
   const renderCurrentView = () => {
     if (isLoading && songs.length === 0) {
       return (
@@ -156,7 +171,7 @@ function AppContent() {
         <div className="py-12">
           <ErrorState
             title="Connection Notice"
-            error="Connecting to Hapsin music catalog. Please ensure you have a network connection."
+            error="Connecting to Projects Mandatory music catalog. Please ensure you have an active network connection."
             onRetry={() => window.location.reload()}
           />
         </div>
@@ -191,6 +206,40 @@ function AppContent() {
       );
     }
 
+    // Artist Studio Portal Route
+    if (currentPath === '/artist/studio') {
+      return (
+        <ArtistStudioPage
+          onNavigateStore={() => navigate('/music')}
+          onNavigateArtistProfile={(artistId) => navigate(`/artist/${artistId}`)}
+        />
+      );
+    }
+
+    // Artists Directory Route
+    if (currentPath === '/artists') {
+      return (
+        <ArtistsListPage
+          onSelectArtist={(artistId) => navigate(`/artist/${artistId}`)}
+          onJoinAsArtist={() => navigate('/artist/studio')}
+        />
+      );
+    }
+
+    // Individual Public Artist Profile Route
+    const routeArtistId = getArtistIdFromRoute();
+    if (routeArtistId) {
+      return (
+        <ArtistProfilePage
+          artistId={routeArtistId}
+          songs={songs}
+          onBack={() => navigate('/artists')}
+          onBuy={handleBuy}
+          onSelectSong={handleSelectSong}
+        />
+      );
+    }
+
     // Promote Music / Artist Submissions Route
     if (currentPath === '/promote') {
       return (
@@ -211,7 +260,7 @@ function AppContent() {
             <p className="text-xs text-slate-400 mb-4">The track you are looking for does not exist or has been removed.</p>
             <button
               onClick={() => navigate('/music')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold"
+              className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-semibold"
             >
               Browse Music
             </button>
@@ -260,7 +309,7 @@ function AppContent() {
         return (
           <div className="py-12 text-center">
             <h2 className="text-xl font-bold text-white mb-2">No Transaction Reference</h2>
-            <button onClick={() => navigate('/music')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs">
+            <button onClick={() => navigate('/music')} className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs">
               Go to Music
             </button>
           </div>
@@ -371,7 +420,9 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <AdminProvider>
-          <AppContent />
+          <ArtistProvider>
+            <AppContent />
+          </ArtistProvider>
         </AdminProvider>
       </AuthProvider>
     </ToastProvider>

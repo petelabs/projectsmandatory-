@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Music, Menu, X, User, ShieldCheck, ShoppingBag, Disc, Sparkles, MessageCircle } from 'lucide-react';
+import { Music, Menu, X, User, ShieldCheck, ShoppingBag, Disc, Sparkles, MessageCircle, Mic2, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAdmin } from '../../context/AdminContext';
+import { useArtist } from '../../context/ArtistContext';
 import { isAuthorizedAdmin, OFFICIAL_WHATSAPP_LINK } from '../../lib/firebase';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -14,13 +15,15 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { isAdminAuthenticated } = useAdmin();
+  const { isArtist, artistProfile } = useArtist();
 
   const isUserAdmin = isAdminAuthenticated || (user?.email && isAuthorizedAdmin(user.email));
 
   const navLinks = [
     { label: 'Home', path: '/' },
     { label: 'Music Store', path: '/music' },
-    { label: 'Promote Music', path: '/promote', highlight: true },
+    { label: 'Artists', path: '/artists' },
+    { label: 'Artist Studio', path: '/artist/studio', highlight: true },
     { label: 'About Hapsin', path: '/about' },
     { label: 'Contact', path: '/contact' },
     { label: 'My Purchases', path: '/purchases' },
@@ -52,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                 PROJECTS <span className="text-rose-500">MANDATORY</span>
               </span>
               <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase block mt-0.5">
-                Featuring Hapsin • Music Store
+                Music Platform • Featuring Hapsin
               </span>
             </div>
           </button>
@@ -69,11 +72,11 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                     isActive
                       ? 'text-white bg-rose-600/20 border border-rose-500/40'
                       : link.highlight
-                      ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/40'
+                      ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/40 border border-amber-500/30'
                       : 'text-slate-300 hover:text-white hover:bg-slate-900/60'
                   }`}
                 >
-                  {link.highlight && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+                  {link.highlight && <Mic2 className="w-3.5 h-3.5 text-amber-400" />}
                   <span>{link.label}</span>
                 </button>
               );
@@ -129,13 +132,13 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
               <span>{isAuthenticated ? (user?.name || 'Account') : 'Sign In'}</span>
             </button>
 
-            {/* Promote Music CTA */}
+            {/* Artist Studio CTA */}
             <button
-              onClick={() => handleNavClick('/promote')}
+              onClick={() => handleNavClick('/artist/studio')}
               className="min-h-[40px] px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-md shadow-rose-950/40 border border-rose-500/40 transition active:scale-[0.98] flex items-center gap-1.5"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Promote Music</span>
+              <Mic2 className="w-3.5 h-3.5" />
+              <span>{isArtist ? 'Artist Studio' : 'Join as Artist'}</span>
             </button>
           </div>
 
@@ -183,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    {link.highlight && <Sparkles className="w-4 h-4 text-amber-400" />}
+                    {link.highlight && <Mic2 className="w-4 h-4 text-amber-400" />}
                     <span>{link.label}</span>
                   </div>
                   {link.path === '/purchases' && (
@@ -231,11 +234,11 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             )}
 
             <button
-              onClick={() => handleNavClick('/promote')}
+              onClick={() => handleNavClick('/artist/studio')}
               className="w-full min-h-[46px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>PROMOTE YOUR MUSIC</span>
+              <Mic2 className="w-4 h-4" />
+              <span>{isArtist ? 'Open Artist Studio' : 'CREATE ARTIST ACCOUNT'}</span>
             </button>
           </div>
         </div>
@@ -243,4 +246,3 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
     </header>
   );
 };
-

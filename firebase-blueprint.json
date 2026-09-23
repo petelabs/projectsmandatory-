@@ -2,45 +2,110 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "User profile stored in Firestore",
+      "description": "User and artist profile stored in Firestore",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
         "name": { "type": "string" },
         "email": { "type": "string" },
         "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "role": { "type": "string", "enum": ["customer", "admin", "artist"] },
+        "isArtist": { "type": "boolean" },
+        "artistId": { "type": "string" },
         "createdAt": { "type": "string" }
       },
       "required": ["uid", "email"]
     },
+    "Artist": {
+      "title": "Artist",
+      "description": "Registered artist profile, payout credentials, and wallet balances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "bio": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "genres": { "type": "array", "items": { "type": "string" } },
+        "payoutDetails": { "type": "object" },
+        "wallet": { "type": "object" },
+        "isVerified": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["ACTIVE", "PENDING_APPROVAL", "SUSPENDED"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "artistName", "email", "phone"]
+    },
+    "ArtistSubmission": {
+      "title": "ArtistSubmission",
+      "description": "Artist song upload request with custom price up to K5000 and 70/30 platform split",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "title": { "type": "string" },
+        "priceMWK": { "type": "number" },
+        "artistShareMWK": { "type": "number" },
+        "platformShareMWK": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "audioFilePath": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "artistId", "title", "priceMWK", "status"]
+    },
+    "ArtistTip": {
+      "title": "ArtistTip",
+      "description": "Direct fan backing and supporter tips for artists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "supporterName": { "type": "string" },
+        "amountMWK": { "type": "number" },
+        "artistShareMWK": { "type": "number" },
+        "platformShareMWK": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "artistId", "amountMWK", "status"]
+    },
+    "ArtistPayout": {
+      "title": "ArtistPayout",
+      "description": "Disbursement records for artist earnings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "artistId": { "type": "string" },
+        "amountMWK": { "type": "number" },
+        "accountNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["REQUESTED", "PROCESSED", "REJECTED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "artistId", "amountMWK", "status"]
+    },
     "Song": {
       "title": "Song",
-      "description": "Single-artist master track metadata",
+      "description": "Published single-artist master track metadata",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "title": { "type": "string" },
         "artist": { "type": "string" },
-        "featuredArtists": { "type": "string" },
-        "description": { "type": "string" },
-        "genre": { "type": "string" },
-        "priceMwk": { "type": "number" },
-        "coverUrl": { "type": "string" },
-        "storagePath": { "type": "string" },
-        "fileSize": { "type": "string" },
-        "fileFormat": { "type": "string" },
-        "releaseDate": { "type": "string" },
-        "producer": { "type": "string" },
-        "lyrics": { "type": "string" },
-        "published": { "type": "boolean" },
-        "isLatest": { "type": "boolean" },
-        "isFeatured": { "type": "boolean" },
-        "downloadCount": { "type": "number" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "artistId": { "type": "string" },
+        "priceMWK": { "type": "number" },
+        "artistShareMWK": { "type": "number" },
+        "platformShareMWK": { "type": "number" },
+        "coverImage": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" }
       },
-      "required": ["id", "title", "priceMwk", "published"]
+      "required": ["id", "title", "priceMWK", "isPublished"]
     },
     "Order": {
       "title": "Order",
@@ -48,67 +113,14 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "customerName": { "type": "string" },
-        "customerEmail": { "type": "string" },
-        "customerPhone": { "type": "string" },
-        "songId": { "type": "string" },
-        "songTitle": { "type": "string" },
-        "songCover": { "type": "string" },
-        "amountMwk": { "type": "number" },
-        "currency": { "type": "string" },
-        "status": { "type": "string", "enum": ["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"] },
-        "paymentProvider": { "type": "string" },
-        "paymentMethod": { "type": "string" },
-        "transactionId": { "type": "string" },
         "txRef": { "type": "string" },
-        "downloadToken": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "paidAt": { "type": "string" }
-      },
-      "required": ["id", "customerEmail", "songId", "amountMwk", "status", "txRef"]
-    },
-    "PaymentEvent": {
-      "title": "PaymentEvent",
-      "description": "Idempotent payment webhook event logging",
-      "type": "object",
-      "properties": {
-        "transactionId": { "type": "string" },
-        "eventType": { "type": "string" },
-        "processed": { "type": "boolean" },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["transactionId", "eventType", "processed", "createdAt"]
-    },
-    "DownloadToken": {
-      "title": "DownloadToken",
-      "description": "Encrypted short-lived authorization token for file downloads",
-      "type": "object",
-      "properties": {
-        "orderId": { "type": "string" },
         "songId": { "type": "string" },
-        "tokenHash": { "type": "string" },
-        "downloadCount": { "type": "number" },
-        "maxDownloads": { "type": "number" },
-        "expiresAt": { "type": "string" },
-        "usedAt": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["orderId", "songId", "tokenHash", "expiresAt"]
-    },
-    "ArtistSettings": {
-      "title": "ArtistSettings",
-      "description": "Artist biography and platform metadata",
-      "type": "object",
-      "properties": {
-        "artistName": { "type": "string" },
-        "artistBio": { "type": "string" },
-        "profileImage": { "type": "string" },
-        "contactEmail": { "type": "string" },
-        "contactPhone": { "type": "string" },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["artistName"]
+      "required": ["id", "txRef", "songId", "amount", "status"]
     },
     "ContactMessage": {
       "title": "ContactMessage",
@@ -118,10 +130,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phoneOrWhatsApp": { "type": "string" },
-        "subject": { "type": "string" },
         "message": { "type": "string" },
-        "read": { "type": "boolean" },
-        "status": { "type": "string", "enum": ["NEW", "READ", "ARCHIVED"] },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "name", "phoneOrWhatsApp", "message", "createdAt"]
@@ -132,9 +141,25 @@
       "schema": { "$ref": "#/entities/User" },
       "description": "User profile collection"
     },
+    "/artists/{artistId}": {
+      "schema": { "$ref": "#/entities/Artist" },
+      "description": "Registered artist profiles and payout setups"
+    },
+    "/artistSubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/ArtistSubmission" },
+      "description": "Artist song upload requests for admin review"
+    },
+    "/artistTips/{tipId}": {
+      "schema": { "$ref": "#/entities/ArtistTip" },
+      "description": "Direct fan tips and support"
+    },
+    "/artistPayouts/{payoutId}": {
+      "schema": { "$ref": "#/entities/ArtistPayout" },
+      "description": "Artist payout records"
+    },
     "/songs/{songId}": {
       "schema": { "$ref": "#/entities/Song" },
-      "description": "Published single-artist song catalog"
+      "description": "Published song catalog"
     },
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
@@ -143,18 +168,6 @@
     "/contactMessages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },
       "description": "User contact messages"
-    },
-    "/paymentEvents/{eventId}": {
-      "schema": { "$ref": "#/entities/PaymentEvent" },
-      "description": "Server-side PayChangu webhook event logs"
-    },
-    "/downloadTokens/{tokenId}": {
-      "schema": { "$ref": "#/entities/DownloadToken" },
-      "description": "Protected short-lived download authorization tokens"
-    },
-    "/artistSettings/current": {
-      "schema": { "$ref": "#/entities/ArtistSettings" },
-      "description": "Artist profile settings and contact details"
     }
   }
 }

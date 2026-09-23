@@ -11,11 +11,14 @@ export interface Song {
   id: string;
   title: string;
   artist: string;
+  artistId?: string; // Links to ArtistProfile.id / userId
   featuredArtists?: string;
   producer?: string;
   genre: string;
   releaseDate: string;
-  priceMWK: number;
+  priceMWK: number; // Maximum 5,000 MWK
+  artistShareMWK?: number; // 70% of priceMWK
+  platformShareMWK?: number; // 30% of priceMWK
   coverImage: string;
   description: string;
   lyrics?: string;
@@ -33,6 +36,110 @@ export interface Song {
   downloadCount: number;
   tags?: string[];
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ArtistProfile {
+  id: string; // Document ID (usually matches userId)
+  userId: string; // Firebase Auth UID
+  artistName: string; // Stage / Brand name
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  bio: string;
+  genres: string[];
+  avatarUrl: string;
+  bannerUrl?: string;
+  location?: string;
+  socialLinks?: {
+    instagram?: string;
+    facebook?: string;
+    tiktok?: string;
+    youtube?: string;
+    twitter?: string;
+  };
+  payoutDetails: {
+    accountType: 'AIRTEL_MONEY' | 'TNM_MPAMBA' | 'BANK';
+    accountNumber: string; // e.g. "0999123456" or "0888123456"
+    accountName: string;
+    bankName?: string;
+  };
+  wallet: {
+    totalEarnedMWK: number; // Cumulative 70% share from song sales & fan tips
+    pendingPayoutMWK: number; // Current balance awaiting disbursement
+    totalPaidOutMWK: number; // Total successfully disbursed by admin
+    totalSongSalesCount: number;
+    totalTipsReceivedMWK: number;
+    totalSupportersCount: number;
+  };
+  isVerified: boolean;
+  status: 'ACTIVE' | 'PENDING_APPROVAL' | 'SUSPENDED';
+  inviteCode?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ArtistSongSubmission {
+  id: string;
+  artistId: string;
+  artistName: string;
+  artistEmail: string;
+  artistPhone: string;
+  title: string;
+  featuredArtists?: string;
+  genre: string;
+  releaseDate: string;
+  priceMWK: number; // Capped at MWK 5,000
+  artistShareMWK: number; // 70% of priceMWK
+  platformShareMWK: number; // 30% of priceMWK
+  coverImage: string;
+  audioFilePath?: string;
+  audioFileName?: string;
+  fileSize?: string;
+  fileFormat?: string;
+  streamUrl?: string;
+  description: string;
+  lyrics?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminFeedback?: string;
+  publishedSongId?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface ArtistSupportTip {
+  id: string;
+  artistId: string;
+  artistName: string;
+  supporterName: string;
+  supporterEmail?: string;
+  supporterPhone: string;
+  amountMWK: number;
+  artistShareMWK: number; // 70% credited to artist
+  platformShareMWK: number; // 30% platform fee
+  message?: string;
+  paymentMethod: PaymentMethod;
+  txRef: string;
+  status: PaymentStatus;
+  createdAt: string;
+  paidAt?: string;
+}
+
+export interface ArtistPayoutRecord {
+  id: string;
+  artistId: string;
+  artistName: string;
+  artistEmail: string;
+  amountMWK: number;
+  payoutMethod: 'AIRTEL_MONEY' | 'TNM_MPAMBA' | 'BANK';
+  accountNumber: string;
+  accountName: string;
+  bankName?: string;
+  status: 'REQUESTED' | 'PROCESSED' | 'REJECTED';
+  transactionRef?: string;
+  adminNotes?: string;
+  createdAt: string;
+  processedAt?: string;
 }
 
 export interface Order {
@@ -43,6 +150,9 @@ export interface Order {
   songArtist: string;
   songCover: string;
   songPriceMWK: number;
+  artistId?: string;
+  artistShareMWK?: number;
+  platformShareMWK?: number;
   amount: number;
   currency: string;
   customerName: string;
@@ -104,6 +214,8 @@ export interface UserProfile {
   avatarUrl?: string;
   phone?: string;
   isGoogleUser?: boolean;
+  isArtist?: boolean;
+  artistId?: string;
 }
 
 export interface DownloadTokenPayload {
@@ -154,4 +266,3 @@ export interface ContactMessage {
   read?: boolean;
   status?: 'NEW' | 'READ' | 'ARCHIVED';
 }
-
