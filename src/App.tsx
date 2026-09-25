@@ -4,8 +4,11 @@ import { api } from './lib/api';
 import {
   subscribePublishedSongs,
   subscribeArtistSettings,
+  subscribeAlbums,
+  subscribePlaylists,
+  publishNotificationToFirestore,
 } from './lib/firebase';
-import { INITIAL_SONGS, INITIAL_ALBUMS, INITIAL_PLAYLISTS } from './data/initialData';
+import { INITIAL_SONGS, INITIAL_ALBUMS, INITIAL_PLAYLISTS, INITIAL_ARTIST_SETTINGS } from './data/initialData';
 import { AuthProvider } from './context/AuthContext';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { ArtistProvider } from './context/ArtistContext';
@@ -55,7 +58,7 @@ function AppContent() {
   const [songs, setSongs] = useState<Song[]>(INITIAL_SONGS);
   const [albums, setAlbums] = useState<Album[]>(INITIAL_ALBUMS);
   const [playlists, setPlaylists] = useState<Playlist[]>(INITIAL_PLAYLISTS);
-  const [artistSettings, setArtistSettings] = useState<Partial<ArtistSettings>>({});
+  const [artistSettings, setArtistSettings] = useState<Partial<ArtistSettings>>(INITIAL_ARTIST_SETTINGS);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const [selectedSongForCheckout, setSelectedSongForCheckout] = useState<Song | null>(null);
   const [activeTxRef, setActiveTxRef] = useState<string | null>(null);
@@ -94,23 +97,28 @@ function AppContent() {
   useEffect(() => {
     const unsubscribeSongs = subscribePublishedSongs(
       (realtimeSongs) => {
-        if (realtimeSongs && realtimeSongs.length > 0) {
-          const existingIds = new Set(realtimeSongs.map((s) => s.id));
-          const merged = [...realtimeSongs, ...INITIAL_SONGS.filter((s) => !existingIds.has(s.id))];
-          setSongs(merged);
-        } else {
-          api
-            .getSongs()
-            .then((apiSongs) => {
-              if (apiSongs.length > 0) {
-                setSongs(apiSongs);
-              }
-            })
-            .catch(() => {});
-        }
+        setSongs(realtimeSongs || []);
       },
       (err) => {
-        console.warn('Realtime subscription fallback:', err);
+        console.warn('Realtime songs subscription fallback:', err);
+      }
+    );
+
+    const unsubscribeAlbums = subscribeAlbums(
+      (realtimeAlbums) => {
+        setAlbums(realtimeAlbums || []);
+      },
+      (err) => {
+        console.warn('Realtime albums subscription note:', err);
+      }
+    );
+
+    const unsubscribePlaylists = subscribePlaylists(
+      (realtimePlaylists) => {
+        setPlaylists(realtimePlaylists || []);
+      },
+      (err) => {
+        console.warn('Realtime playlists subscription note:', err);
       }
     );
 
@@ -124,6 +132,8 @@ function AppContent() {
 
     return () => {
       unsubscribeSongs();
+      unsubscribeAlbums();
+      unsubscribePlaylists();
       unsubscribeSettings();
     };
   }, []);
@@ -144,9 +154,18 @@ function AppContent() {
     navigate(`/payment/status/${txRef}`);
   };
 
-  const handlePaymentSuccess = (order: Order, token: string) => {
+  const handlePaymentSuccess = async (order: Order, token: string) => {
     setCompletedOrder(order);
     setCompletedPurchaseToken(token);
+    try {
+      await publishNotificationToFirestore({
+        title: '💳 Payment Successful',
+        body: `Payment of MK ${(order.amount || 0).toLocaleString()} confirmed for "${order.songTitle || 'Track'}". Master download is ready!`,
+        category: 'listener',
+        type: 'payment',
+        link: `/download/${token}`,
+      });
+    } catch {}
     navigate(`/download/${token}`);
   };
 
@@ -544,23 +563,23 @@ export default function App() {
   return (
     <ThemeProvider>
       <DataSaverProvider>
-        <NotificationProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <AdminProvider>
-                <ArtistProvider>
-                  <SubscriptionProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AdminProvider>
+              <ArtistProvider>
+                <SubscriptionProvider>
+                  <NotificationProvider>
                     <PlaybackProvider>
                       <LibraryProvider>
                         <AppContent />
                       </LibraryProvider>
                     </PlaybackProvider>
-                  </SubscriptionProvider>
-                </ArtistProvider>
-              </AdminProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </NotificationProvider>
+                  </NotificationProvider>
+                </SubscriptionProvider>
+              </ArtistProvider>
+            </AdminProvider>
+          </AuthProvider>
+        </ToastProvider>
       </DataSaverProvider>
     </ThemeProvider>
   );

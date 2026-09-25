@@ -16,10 +16,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const saved = localStorage.getItem('pm_theme');
       if (saved === 'light' || saved === 'dark') return saved;
-      // Default to light as showcased on the home mockup
-      return 'light';
+      // Default to dark theme
+      return 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   });
 

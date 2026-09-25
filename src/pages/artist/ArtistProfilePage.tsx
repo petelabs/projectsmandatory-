@@ -15,6 +15,7 @@ import {
   Ticket,
   Sparkles,
   Layers,
+  Music,
 } from 'lucide-react';
 import { Song, ArtistProfile, MerchProduct, EventRecord, Album } from '../../types';
 import { usePlayback } from '../../context/PlaybackContext';
@@ -57,20 +58,16 @@ export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
   const [merchItems, setMerchItems] = useState<MerchProduct[]>([]);
   const [eventsList, setEventsList] = useState<EventRecord[]>([]);
 
-  // Find artist details or default to Bwalya Musik from mockup
-  const artistName = artistId.includes('kizzo')
-    ? 'Kizzo'
-    : artistId.includes('lulu')
-    ? 'Lulu'
-    : artistId.includes('amani')
-    ? 'Amani'
-    : artistId.includes('bflow')
-    ? 'B Flow'
-    : artistId.includes('driemo')
-    ? 'Driemo'
-    : artistId.includes('nkhata')
-    ? 'S.Y. Nkhata'
-    : 'Bwalya Musik';
+  // Dynamically resolve artist name from songs catalog or URL
+  const matchedSong = songs.find(
+    (s) => s.artistId === artistId || s.artist.toLowerCase() === decodeURIComponent(artistId).toLowerCase()
+  );
+  const artistName =
+    matchedSong?.artist ||
+    decodeURIComponent(artistId)
+      .replace(/^artist-/, '')
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
 
   const isFollowing = isArtistFollowed(artistId, artistName);
 
@@ -80,10 +77,11 @@ export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
   };
 
   const artistSongs = songs.filter(
-    (s) => s.artist.toLowerCase().includes(artistName.toLowerCase()) || s.artistId === artistId
+    (s) => (s.artistId && s.artistId === artistId) || s.artist.toLowerCase() === artistName.toLowerCase()
   );
 
-  const displaySongs = artistSongs.length > 0 ? artistSongs : songs.slice(0, 5);
+  const displaySongs = artistSongs;
+  const totalStreams = artistSongs.reduce((sum, s) => sum + (s.streamCount || s.downloadCount || 0), 0);
 
   const artistAlbums = albums.filter(
     (al) => al.artist.toLowerCase().includes(artistName.toLowerCase()) || al.artistId === artistId
@@ -126,7 +124,7 @@ export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
 
           <button
             onClick={async () => {
-              await shareArtist(artistId, artistName, () => {
+              await shareArtist({ id: artistId, name: artistName }, () => {
                 showToast('Artist profile link copied!', 'success');
               });
             }}
@@ -170,7 +168,9 @@ export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
             </div>
 
             <p className="text-xs sm:text-sm text-slate-400 font-medium">
-              128K monthly listeners
+              {totalStreams > 0
+                ? `${totalStreams.toLocaleString()} total streams`
+                : `${artistSongs.length} release${artistSongs.length === 1 ? '' : 's'}`}
             </p>
           </div>
 
@@ -241,71 +241,79 @@ export const ArtistProfilePage: React.FC<ArtistProfilePageProps> = ({
             =================================================== */}
         {activeTab === 'popular' && (
           <div className="space-y-6">
-            <div className="space-y-1.5">
-              {displaySongs.slice(0, 5).map((song, index) => {
-                const isThisPlaying = currentSong?.id === song.id && isPlaying;
+            {displaySongs.length === 0 ? (
+              <div className="p-8 text-center rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <Music className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-sm font-semibold text-slate-400">No tracks published yet by {artistName}</p>
+                <p className="text-xs text-slate-500">Check back soon for new studio master releases.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {displaySongs.slice(0, 5).map((song, index) => {
+                  const isThisPlaying = currentSong?.id === song.id && isPlaying;
 
-                return (
-                  <div
-                    key={song.id}
-                    onClick={() => playSong(song, displaySongs)}
-                    className={`p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition select-none active:scale-[0.99] border ${
-                      isThisPlaying
-                        ? isDark
-                          ? 'bg-slate-800/80 border-[#1455D9]/50'
-                          : 'bg-blue-50/70 border-[#1455D9]/40'
-                        : isDark
-                        ? 'bg-[#11151F] border-slate-800/80 hover:bg-slate-800/40'
-                        : 'bg-white border-[#E5E7EB] hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="w-5 text-center font-mono font-bold text-xs text-slate-400">
-                        {index + 1}
-                      </span>
+                  return (
+                    <div
+                      key={song.id}
+                      onClick={() => playSong(song, displaySongs)}
+                      className={`p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition select-none active:scale-[0.99] border ${
+                        isThisPlaying
+                          ? isDark
+                            ? 'bg-slate-800/80 border-[#1455D9]/50'
+                            : 'bg-blue-50/70 border-[#1455D9]/40'
+                          : isDark
+                          ? 'bg-[#11151F] border-slate-800/80 hover:bg-slate-800/40'
+                          : 'bg-white border-[#E5E7EB] hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="w-5 text-center font-mono font-bold text-xs text-slate-400">
+                          {index + 1}
+                        </span>
 
-                      <img
-                        src={song.coverImage}
-                        alt={song.title}
-                        className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
-                        referrerPolicy="no-referrer"
-                      />
+                        <img
+                          src={song.coverImage}
+                          alt={song.title}
+                          className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
 
-                      <div className="min-w-0 flex-1 text-left">
-                        <h4
-                          className={`text-sm font-bold truncate leading-tight ${
-                            isThisPlaying ? 'text-[#1455D9]' : isDark ? 'text-white' : 'text-[#111827]'
-                          }`}
+                        <div className="min-w-0 flex-1 text-left">
+                          <h4
+                            className={`text-sm font-bold truncate leading-tight ${
+                              isThisPlaying ? 'text-[#1455D9]' : isDark ? 'text-white' : 'text-[#111827]'
+                            }`}
+                          >
+                            {song.title}
+                          </h4>
+                          <p className="text-xs text-slate-400 truncate">
+                            {(song.streamCount || song.downloadCount || 0).toLocaleString()} streams
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className="flex items-center gap-2 flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedActionSong(song);
+                        }}
+                      >
+                        <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                          {song.duration || '3:30'}
+                        </span>
+                        <button
+                          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-white transition rounded-full"
+                          aria-label={`Options for ${song.title}`}
                         >
-                          {song.title}
-                        </h4>
-                        <p className="text-xs text-slate-400 truncate">
-                          {(song.downloadCount || 1200).toLocaleString()} streams
-                        </p>
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-
-                    <div
-                      className="flex items-center gap-2 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedActionSong(song);
-                      }}
-                    >
-                      <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                        {song.duration || '3:30'}
-                      </span>
-                      <button
-                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-white transition rounded-full"
-                        aria-label={`Options for ${song.title}`}
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Fans Also Like / Related Artists */}
             {relatedArtists.length > 0 && (

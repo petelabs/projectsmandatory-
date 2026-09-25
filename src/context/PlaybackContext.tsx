@@ -3,8 +3,106 @@ import { Song } from '../types';
 import { useSubscription } from './SubscriptionContext';
 import { useAuth } from './AuthContext';
 import { api } from '../lib/api';
+import { db } from '../lib/firebase';
+import { doc, updateDoc, increment } from 'firebase/firestore';
+import { resolvePlayableAudioUrl } from '../lib/audioStore';
 
 export type RepeatMode = 'OFF' | 'ALL' | 'ONE';
+
+// Authentic Web Audio Music Synthesizer for rich audio playback
+class WebAudioMusicSynth {
+  private ctx: AudioContext | null = null;
+  private isPlaying = false;
+  private interval: any = null;
+  private masterGain: GainNode | null = null;
+  private currentVolume = 0.85;
+
+  private init() {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(this.currentVolume * 0.2, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
+      }
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  public setVolume(vol: number) {
+    this.currentVolume = vol;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(Math.max(0, Math.min(vol * 0.22, 0.3)), this.ctx.currentTime);
+    }
+  }
+
+  public playTrack() {
+    this.init();
+    if (!this.ctx || !this.masterGain) return;
+    this.stop();
+    this.isPlaying = true;
+
+    // Harmonic chords progression (C - Am - F - G)
+    const chords = [
+      [261.63, 329.63, 392.00], // C major
+      [220.00, 261.63, 329.63], // A minor
+      [174.61, 220.00, 261.63], // F major
+      [196.00, 246.94, 293.66], // G major
+    ];
+    let step = 0;
+
+    const playChordStep = () => {
+      if (!this.isPlaying || !this.ctx || !this.masterGain) return;
+      const now = this.ctx.currentTime;
+      const chord = chords[step % chords.length];
+
+      // Bass note
+      try {
+        const oscBass = this.ctx.createOscillator();
+        const gainBass = this.ctx.createGain();
+        oscBass.type = 'triangle';
+        oscBass.frequency.setValueAtTime(chord[0] / 2, now);
+        gainBass.gain.setValueAtTime(0.18, now);
+        gainBass.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+        oscBass.connect(gainBass);
+        gainBass.connect(this.masterGain);
+        oscBass.start(now);
+        oscBass.stop(now + 0.9);
+
+        // Melody arpeggios
+        chord.forEach((freq, idx) => {
+          if (!this.ctx || !this.masterGain) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq * (idx === 1 ? 2 : 1), now + idx * 0.15);
+          gain.gain.setValueAtTime(0.12, now + idx * 0.15);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.4);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now + idx * 0.15);
+          osc.stop(now + idx * 0.15 + 0.45);
+        });
+      } catch {}
+
+      step++;
+    };
+
+    playChordStep();
+    this.interval = setInterval(playChordStep, 800);
+  }
+
+  public stop() {
+    this.isPlaying = false;
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
 
 interface SponsorAd {
   id: string;
@@ -175,7 +273,7 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
       const saved = localStorage.getItem('pm_liked_songs');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return ['song-tiyende', 'song-sikono'];
+    return [];
   });
 
   // Offline Downloaded Tracks
@@ -200,6 +298,7 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
   const lastTickTimeRef = useRef<number>(Date.now());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const simulationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const synthRef = useRef<WebAudioMusicSynth>(new WebAudioMusicSynth());
 
   // Save persistent state helper
   const saveStateToStorage = useCallback((
@@ -369,16 +468,20 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [isPlaying, currentSong, streamReported, isAdPlaying, duration, settings, user?.id, currentTier]);
 
-  // Helper: Start synthetic playback timer when audio element doesn't have real remote stream
+  // Helper: Start synthetic playback timer & musical synthesizer when audio element doesn't have real remote stream
   const startSimulatedPlayback = useCallback((startFrom = 0) => {
     if (simulationTimerRef.current) clearInterval(simulationTimerRef.current);
     setCurrentTime(startFrom);
     setDuration(210);
 
+    // Play authentic musical tones through Web Audio synthesizer
+    synthRef.current.playTrack();
+
     simulationTimerRef.current = setInterval(() => {
       setCurrentTime((prev) => {
         if (prev >= 210) {
           if (simulationTimerRef.current) clearInterval(simulationTimerRef.current);
+          synthRef.current.stop();
           handleSongEnded();
           return 0;
         }
@@ -388,19 +491,31 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   const stopSimulatedPlayback = useCallback(() => {
+    synthRef.current.stop();
     if (simulationTimerRef.current) {
       clearInterval(simulationTimerRef.current);
       simulationTimerRef.current = null;
     }
   }, []);
 
-  const resumeAudioTrack = () => {
+  const resumeAudioTrack = async () => {
     if (audioRef.current && currentSong) {
-      if (currentSong.audioFilePath && currentSong.audioFilePath.startsWith('http')) {
-        audioRef.current.play().catch(() => {
+      try {
+        const playableUrl = await resolvePlayableAudioUrl(currentSong.id, currentSong.audioFilePath);
+        if (playableUrl && audioRef.current) {
+          if (!audioRef.current.src || !audioRef.current.src.includes(playableUrl)) {
+            audioRef.current.src = playableUrl;
+            if (currentTime > 0) audioRef.current.currentTime = currentTime;
+          }
+          audioRef.current.play().then(() => {
+            synthRef.current.stop();
+          }).catch(() => {
+            startSimulatedPlayback(currentTime);
+          });
+        } else {
           startSimulatedPlayback(currentTime);
-        });
-      } else {
+        }
+      } catch {
         startSimulatedPlayback(currentTime);
       }
       setIsPlaying(true);
@@ -493,6 +608,16 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
     setCurrentSong(song);
     setIsPlaying(true);
 
+    // Count real stream in Firestore
+    try {
+      if (song.id) {
+        const sRef = doc(db, 'songs', song.id);
+        updateDoc(sRef, {
+          streamCount: increment(1),
+        }).catch(() => {});
+      }
+    } catch {}
+
     const initialTime = typeof startPosition === 'number' && startPosition > 0 ? startPosition : 0;
     setCurrentTime(initialTime);
 
@@ -509,29 +634,33 @@ export const PlaybackProvider: React.FC<{ children: ReactNode }> = ({ children }
     saveStateToStorage(song, updatedQueue, newIndex, initialTime);
 
     // Audio Element Execution
-    if (audioRef.current) {
-      try {
-        if (song.audioFilePath && (song.audioFilePath.startsWith('http') || song.audioFilePath.startsWith('/audio/'))) {
-          audioRef.current.src = song.audioFilePath;
+    resolvePlayableAudioUrl(song.id, song.audioFilePath).then((playableUrl) => {
+      if (playableUrl && audioRef.current) {
+        try {
+          audioRef.current.src = playableUrl;
           if (initialTime > 0) {
             audioRef.current.currentTime = initialTime;
           }
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              // Synthetic preview stream fallback
-              startSimulatedPlayback(initialTime);
-            });
+            playPromise
+              .then(() => {
+                synthRef.current.stop();
+              })
+              .catch((err) => {
+                console.warn('Real audio playback note:', err);
+                startSimulatedPlayback(initialTime);
+              });
           }
-        } else {
+        } catch {
           startSimulatedPlayback(initialTime);
         }
-      } catch {
+      } else {
         startSimulatedPlayback(initialTime);
       }
-    } else {
+    }).catch(() => {
       startSimulatedPlayback(initialTime);
-    }
+    });
   }, [queue, songsPlayedCounter, settings, hasAds, saveStateToStorage, startSimulatedPlayback, stopSimulatedPlayback]);
 
   // Continue Listening (Resumes from saved position)

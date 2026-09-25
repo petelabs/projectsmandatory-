@@ -104,7 +104,7 @@ export const MusicPage: React.FC<MusicPageProps> = ({
             Discover Music
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Stream popular hits, new releases, and authentic Malawian sounds
+            Stream popular hits, new releases, and curated sounds across all genres
           </p>
         </div>
 

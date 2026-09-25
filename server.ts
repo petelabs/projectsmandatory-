@@ -43,11 +43,19 @@ import {
   AdminFinancialLog,
   Phase2AdminSettings,
 } from './src/types';
+import {
+  isR2Configured,
+  getPresignedUploadUrl,
+  uploadBufferToR2,
+  getMediaStream,
+  getSignedAccessUrl,
+} from './server/r2Service';
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use('/api/r2/direct-upload', express.raw({ type: '*/*', limit: '150mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // In-Memory Database (Server-authoritative state synchronized with Firestore model)
 let songs: Song[] = [...INITIAL_SONGS];

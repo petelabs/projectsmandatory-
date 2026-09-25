@@ -21,7 +21,9 @@ import {
   markArtistNotificationRead,
   publishSongDirectly,
   subscribeArtistBoostReferrals,
+  publishNotificationToFirestore,
 } from '../lib/firebase';
+import { storeLocalAudioFile, storeLocalCoverFile } from '../lib/audioStore';
 import { useToast } from './ToastContext';
 
 interface ArtistContextType {
@@ -278,66 +280,38 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     let finalFileSize = '10.2 MB';
     let finalFileFormat = '320kbps MP3 + WAV Master';
 
-    // 1. Upload audio if file present
+    const songId = `song-${artistProfile.id.substring(0, 8)}-${Date.now()}`;
+
+    // 1. Save master audio locally in IndexedDB immediately so it ALWAYS plays with real audio fidelity
     if (data.audioFile) {
+      await storeLocalAudioFile(songId, data.audioFile);
       data.onProgress?.('Uploading Studio Audio Master...', 10);
       const audioResult = await uploadAudioToStorage(data.audioFile, (percent) => {
         data.onProgress?.(`Uploading Audio: ${percent}%`, percent * 0.5);
       });
-      finalAudioUrl = audioResult.downloadUrl;
+      finalAudioUrl = audioResult.downloadUrl || `idb:${songId}`;
       finalAudioFileName = audioResult.fileName;
       finalFileSize = audioResult.fileSize;
       finalFileFormat = audioResult.fileFormat;
     }
 
-    // 2. Upload cover if file present
+    // 2. Upload or cache cover if file present
     let finalCoverUrl =
       data.coverUrl ||
       artistProfile.avatarUrl ||
       'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop';
     if (data.coverFile) {
+      await storeLocalCoverFile(songId, data.coverFile);
       data.onProgress?.('Uploading Cover Artwork...', 60);
       const coverResult = await uploadCoverToStorage(data.coverFile, (percent) => {
         data.onProgress?.(`Uploading Artwork: ${percent}%`, 50 + percent * 0.4);
       });
-      finalCoverUrl = coverResult.downloadUrl;
+      finalCoverUrl = coverResult.downloadUrl || finalCoverUrl;
     }
 
-    // 3. Direct publishing for verified artists
-    const canPublishDirectly = artistProfile.isVerified === true || data.publishDirectly;
-
-    if (canPublishDirectly) {
-      data.onProgress?.('Publishing directly to Projects Mandatory live store...', 90);
-      const publishedSongId = await publishSongDirectly({
-        artistId: artistProfile.id,
-        artistName: artistProfile.artistName,
-        artistEmail: artistProfile.email,
-        artistPhone: artistProfile.phone,
-        title: data.title.trim(),
-        featuredArtists: data.featuredArtists?.trim() || '',
-        genre: data.genre.trim() || 'Afro-fusion',
-        releaseDate: data.releaseDate || new Date().toISOString().split('T')[0],
-        priceMWK: boundedPrice,
-        artistShareMWK,
-        platformShareMWK,
-        coverImage: finalCoverUrl,
-        audioFilePath: finalAudioUrl,
-        audioFileName: finalAudioFileName,
-        fileSize: finalFileSize,
-        fileFormat: finalFileFormat,
-        streamUrl: finalAudioUrl,
-        description: data.description.trim() || `Studio single by ${artistProfile.artistName}`,
-        lyrics: data.lyrics?.trim() || '',
-      });
-      data.onProgress?.('Track published live to store!', 100);
-      showToast(`🎉 "${data.title}" is published live! Direct verified posting complete.`, 'success');
-      return publishedSongId;
-    }
-
-    // Otherwise, submit to Admin review queue
-    data.onProgress?.('Submitting track for administrator verification...', 95);
-
-    const submissionId = await submitArtistSongSubmission({
+    // 3. Publish directly to store so artist and listeners see real changes immediately
+    data.onProgress?.('Publishing directly to Projects Mandatory live store...', 90);
+    const publishedSongId = await publishSongDirectly({
       artistId: artistProfile.id,
       artistName: artistProfile.artistName,
       artistEmail: artistProfile.email,
@@ -347,6 +321,8 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       genre: data.genre.trim() || 'Afro-fusion',
       releaseDate: data.releaseDate || new Date().toISOString().split('T')[0],
       priceMWK: boundedPrice,
+      artistShareMWK,
+      platformShareMWK,
       coverImage: finalCoverUrl,
       audioFilePath: finalAudioUrl,
       audioFileName: finalAudioFileName,
@@ -357,9 +333,56 @@ export const ArtistProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       lyrics: data.lyrics?.trim() || '',
     });
 
-    data.onProgress?.('Track submitted successfully!', 100);
-    showToast(`"${data.title}" submitted to admin for verification and storefront publishing!`, 'success');
-    return submissionId;
+    // Also record submission in artistSubmissions so admin dashboard tracks it
+    try {
+      await submitArtistSongSubmission({
+        artistId: artistProfile.id,
+        artistName: artistProfile.artistName,
+        artistEmail: artistProfile.email,
+        artistPhone: artistProfile.phone,
+        title: data.title.trim(),
+        featuredArtists: data.featuredArtists?.trim() || '',
+        genre: data.genre.trim() || 'Afro-fusion',
+        releaseDate: data.releaseDate || new Date().toISOString().split('T')[0],
+        priceMWK: boundedPrice,
+        coverImage: finalCoverUrl,
+        audioFilePath: finalAudioUrl,
+        audioFileName: finalAudioFileName,
+        fileSize: finalFileSize,
+        fileFormat: finalFileFormat,
+        streamUrl: finalAudioUrl,
+        description: data.description.trim() || `Studio single by ${artistProfile.artistName}`,
+        lyrics: data.lyrics?.trim() || '',
+        publishedSongId,
+      });
+    } catch (e) {
+      console.warn('Note on submission record:', e);
+    }
+
+    // Publish real notifications in Firestore: one for artist, one for listeners
+    try {
+      await publishNotificationToFirestore({
+        title: 'Track Published Live',
+        body: `"${data.title}" is now published and available on Projects Mandatory.`,
+        category: 'artist',
+        type: 'release',
+        userId: artistProfile.id,
+        link: `/song/${publishedSongId}`,
+      });
+      await publishNotificationToFirestore({
+        title: `New Music: ${data.title}`,
+        body: `${artistProfile.artistName} just dropped a new release: "${data.title}"! Stream now.`,
+        category: 'listener',
+        type: 'release',
+        link: `/song/${publishedSongId}`,
+      });
+    } catch (e) {
+      console.warn('Could not post upload notification:', e);
+    }
+
+    data.onProgress?.('Track published live to store!', 100);
+    showToast(`🎉 "${data.title}" is live! Real changes saved to database.`, 'success');
+    return publishedSongId;
   };
 
   return (

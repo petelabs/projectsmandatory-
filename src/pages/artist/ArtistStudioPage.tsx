@@ -42,6 +42,7 @@ import { ArtistTipsTab } from '../../components/artist/ArtistTipsTab';
 import { ArtistMerchManager } from '../../components/artist/ArtistMerchManager';
 import { ArtistEventManager } from '../../components/artist/ArtistEventManager';
 import { api } from '../../lib/api';
+import { resolvePlayableAudioUrl } from '../../lib/audioStore';
 
 interface ArtistStudioPageProps {
   onNavigateStore: () => void;
@@ -167,11 +168,21 @@ export const ArtistStudioPage: React.FC<ArtistStudioPageProps> = ({
       if (activeAudioElement) {
         activeAudioElement.pause();
       }
-      const audio = new Audio(submission.audioFilePath);
-      audio.play();
-      audio.onended = () => setPlayingSubmissionId(null);
-      setActiveAudioElement(audio);
-      setPlayingSubmissionId(submission.id);
+      resolvePlayableAudioUrl(submission.id, submission.audioFilePath).then((playableUrl) => {
+        if (!playableUrl) {
+          showToast('No audio stream found for preview', 'info');
+          return;
+        }
+        const audio = new Audio(playableUrl);
+        audio.play().catch((err) => {
+          console.warn('Audio preview play note:', err);
+        });
+        audio.onended = () => setPlayingSubmissionId(null);
+        setActiveAudioElement(audio);
+        setPlayingSubmissionId(submission.id);
+      }).catch(() => {
+        showToast('Could not load audio master', 'error');
+      });
     }
   };
 
@@ -1510,14 +1521,14 @@ export const ArtistStudioPage: React.FC<ArtistStudioPageProps> = ({
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700">
-                        {sub.coverArtUrl ? (
-                          <img src={sub.coverArtUrl} alt={sub.title} className="w-full h-full object-cover" />
+                        {sub.coverImage || sub.coverArtUrl ? (
+                          <img src={sub.coverImage || sub.coverArtUrl} alt={sub.title} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-600">
                             <Disc className="w-6 h-6" />
                           </div>
                         )}
-                        {sub.audioFilePath && (
+                        {(sub.audioFilePath || sub.streamUrl) && (
                           <button
                             onClick={() => handleTogglePlay(sub)}
                             className="absolute inset-0 bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition"
@@ -1541,7 +1552,7 @@ export const ArtistStudioPage: React.FC<ArtistStudioPageProps> = ({
 
                     <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/80">
                       <span className="text-slate-500">
-                        Uploaded: {new Date(sub.submittedAt).toLocaleDateString()}
+                        Uploaded: {new Date(sub.createdAt || sub.submittedAt || Date.now()).toLocaleDateString()}
                       </span>
                       <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[10px] ${
                         sub.status === 'APPROVED'

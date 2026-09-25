@@ -63,28 +63,26 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [activeChip, setActiveChip] = useState<string>('All');
   const [newReleasesTab, setNewReleasesTab] = useState<'songs' | 'albums'>('songs');
 
-  // Filter chips including top genres and moods
+  // Filter chips with all 16 core genres
   const chips = [
     'All',
-    'Malawi',
     'Afrobeats',
-    'Hip-Hop',
-    'Gospel',
     'Amapiano',
+    'Hip-Hop',
     'R&B',
-    'Chill',
-    'Workout',
-    'Party',
-    'Focus',
+    'Dancehall',
+    'Afro-Pop',
+    'Reggae',
+    'Gospel',
+    'Trap',
+    'Drill',
+    'House',
+    'Electronic',
+    'Soul',
+    'Jazz',
+    'Pop',
+    'Lo-Fi',
   ];
-
-  // Dynamic greeting based on time of day
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning,';
-    if (hour < 18) return 'Good afternoon,';
-    return 'Good evening,';
-  }, []);
 
   // Filter songs if a chip is selected
   const activeFilteredSongs = useMemo(() => {
@@ -139,22 +137,9 @@ export const HomePage: React.FC<HomePageProps> = ({
       <div className="space-y-7 pb-8 text-left">
         
         {/* ===================================================
-            GREETING & SEARCH BAR
+            SEARCH BAR & GENRE CHIPS
             =================================================== */}
         <div className="space-y-3 pt-1">
-          <div>
-            <span className="text-sm font-semibold text-[#1455D9] block">
-              {greeting}
-            </span>
-            <h1
-              className={`text-2xl sm:text-3xl font-extrabold tracking-tight ${
-                isDark ? 'text-white' : 'text-[#111827]'
-              }`}
-            >
-              Discover & Stream Music
-            </h1>
-          </div>
-
           {/* Search Bar Input */}
           <div
             onClick={() => onNavigate('/search')}
@@ -706,7 +691,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         )}
 
         {/* ===================================================
-            POPULAR IN MALAWI (LOCAL ANTHEMS & FOLK)
+            TOP TRENDING ANTHEMS
             =================================================== */}
         {activeChip === 'All' && malawiSongs.length > 0 && (
           <section className="space-y-3">
@@ -717,12 +702,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                     isDark ? 'text-white' : 'text-[#111827]'
                   }`}
                 >
-                  Popular in Malawi 🇲🇼
+                  Top Trending Anthems 🔥
                 </h2>
-                <span className="text-xs text-slate-400">Authentic native hits & modern sounds</span>
+                <span className="text-xs text-slate-400">Authentic hits & trending sounds</span>
               </div>
               <button
-                onClick={() => onNavigate('/music?genre=Malawi')}
+                onClick={() => onNavigate('/music')}
                 className="text-xs font-semibold text-[#1455D9] hover:underline"
               >
                 See all

@@ -189,6 +189,17 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Albums Catalog
+    match /albums/{albumId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() || isAuthenticated();
+    }
+
+    // Notifications Collection (Real-time user & admin alerts)
+    match /notifications/{notificationId} {
+      allow read, create, update, delete: if true;
+    }
+
     // Server-only Collections
     match /paymentEvents/{eventId} {
       allow read, write: if false;

@@ -31,6 +31,7 @@ import {
   Send,
   XCircle,
   TrendingUp,
+  Bell,
 } from 'lucide-react';
 import {
   Song,
@@ -61,22 +62,27 @@ import {
   processArtistPayout,
   approveArtistVerification,
   rejectArtistVerification,
+  subscribeAllNotifications,
+  publishNotificationToFirestore,
+  FirestoreNotificationRecord,
   OFFICIAL_WHATSAPP_NUMBER,
   OFFICIAL_WHATSAPP_LINK,
 } from '../../lib/firebase';
+import { storeLocalAudioFile, storeLocalCoverFile } from '../../lib/audioStore';
 import { useAdmin } from '../../context/AdminContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../context/ToastContext';
 import { AdminMonetizationTab } from '../../components/admin/AdminMonetizationTab';
+import { AdminNotificationsTab } from '../../components/admin/AdminNotificationsTab';
 
 interface AdminDashboardPageProps {
   onLogout: () => void;
   onNavigateStore: () => void;
 }
 
-type AdminTab = 'monetization' | 'submissions' | 'verification' | 'artists' | 'songs' | 'messages' | 'requests' | 'orders';
+type AdminTab = 'monetization' | 'notifications' | 'submissions' | 'verification' | 'artists' | 'songs' | 'messages' | 'requests' | 'orders';
 
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
@@ -93,6 +99,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [artists, setArtists] = useState<ArtistProfile[]>([]);
   const [promoRequests, setPromoRequests] = useState<MusicPromotionRequest[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [notifications, setNotifications] = useState<FirestoreNotificationRecord[]>([]);
   const [submissionFilter, setSubmissionFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [verificationFilter, setVerificationFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
   const [selectedArtistForVerificationReject, setSelectedArtistForVerificationReject] = useState<ArtistProfile | null>(null);
@@ -162,6 +169,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       setContactMessages(data);
     });
 
+    const unsubNotifs = subscribeAllNotifications((data) => {
+      setNotifications(data);
+    });
+
     return () => {
       unsubSongs();
       unsubOrders();
@@ -169,6 +180,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       unsubArtists();
       unsubPromo();
       unsubMessages();
+      unsubNotifs();
       if (audioPreviewRef.current) {
         audioPreviewRef.current.pause();
       }
@@ -203,7 +215,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const handleApproveSubmission = async (sub: ArtistSongSubmission) => {
     setProcessingSubmissionId(sub.id);
     try {
-      await approveAndPublishSong(sub);
+      const newSongId = await approveAndPublishSong(sub);
+      // Real notification to artist
+      await publishNotificationToFirestore({
+        title: 'Track Approved & Published! 🎵',
+        body: `Congratulations! "${sub.title}" has been reviewed, approved, and published to the live store.`,
+        category: 'artist',
+        type: 'song_approved',
+        userId: sub.artistId,
+        link: `/song/${newSongId || sub.id}`,
+      });
+      // Broadcast to listeners
+      await publishNotificationToFirestore({
+        title: `New Release: ${sub.title}`,
+        body: `${sub.artistName} just released "${sub.title}"! Stream preview or buy master recording now.`,
+        category: 'listener',
+        type: 'release',
+        link: `/song/${newSongId || sub.id}`,
+      });
       showToast(`Track "${sub.title}" by ${sub.artistName} approved and published to store!`, 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to approve track';
@@ -219,6 +248,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setProcessingSubmissionId(rejectModalSubmission.id);
     try {
       await rejectSongSubmission(rejectModalSubmission.id, rejectFeedback.trim());
+      await publishNotificationToFirestore({
+        title: 'Submission Status Update',
+        body: `Your track "${rejectModalSubmission.title}" requires revisions before approval: ${rejectFeedback.trim()}`,
+        category: 'artist',
+        type: 'account',
+        userId: rejectModalSubmission.artistId,
+        link: '/artist-studio',
+      });
       showToast(`Submission rejected with feedback sent to artist.`, 'info');
       setRejectModalSubmission(null);
       setRejectFeedback('');
@@ -235,6 +272,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setIsProcessingVerification(artist.id);
     try {
       await approveArtistVerification(artist.id);
+      await publishNotificationToFirestore({
+        title: 'Artist Verification Approved! 🛡️',
+        body: `Congratulations ${artist.artistName}! Your artist account has been verified. You now have direct publishing privileges.`,
+        category: 'artist',
+        type: 'milestone',
+        userId: artist.id,
+        link: '/artist-studio',
+      });
       showToast(`Artist "${artist.artistName}" approved! Direct publishing is now active for them.`, 'success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to approve verification';
@@ -250,6 +295,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setIsProcessingVerification(selectedArtistForVerificationReject.id);
     try {
       await rejectArtistVerification(selectedArtistForVerificationReject.id, verificationRejectFeedback.trim());
+      await publishNotificationToFirestore({
+        title: 'Artist Verification Update',
+        body: `Your verification request could not be approved at this time: ${verificationRejectFeedback.trim()}`,
+        category: 'artist',
+        type: 'account',
+        userId: selectedArtistForVerificationReject.id,
+        link: '/artist-studio',
+      });
       showToast(`Verification rejected for ${selectedArtistForVerificationReject.artistName}. Feedback sent.`, 'info');
       setSelectedArtistForVerificationReject(null);
       setVerificationRejectFeedback('');
@@ -273,6 +326,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         payoutAmount,
         payoutNotes.trim() || `Disbursed to ${selectedArtistForPayout.payoutDetails?.accountNumber || selectedArtistForPayout.phone}`
       );
+      await publishNotificationToFirestore({
+        title: 'Earnings Payout Disbursed! 💸',
+        body: `A payout of MK ${payoutAmount.toLocaleString()} has been sent to your registered mobile money account.`,
+        category: 'artist',
+        type: 'payout',
+        userId: selectedArtistForPayout.id,
+        link: '/artist-studio',
+      });
       showToast(`MK ${payoutAmount.toLocaleString()} payout successfully recorded for ${selectedArtistForPayout.artistName}!`, 'success');
       setSelectedArtistForPayout(null);
       setPayoutAmount(0);
@@ -334,12 +395,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       let finalFileFormat = editingSong.fileFormat || '320kbps MP3 Master';
 
       // 1. Upload audio if file selected
+      const songId = editingSong.id || `song-${Date.now()}`;
       if (audioFile) {
         showToast('Uploading master audio recording to storage...', 'info');
+        await storeLocalAudioFile(songId, audioFile);
         const audioUploadResult = await uploadAudioToStorage(audioFile, (percent) => {
           setAudioUploadProgress(percent);
         });
-        finalAudioUrl = audioUploadResult.downloadUrl;
+        finalAudioUrl = audioUploadResult.downloadUrl || `idb:${songId}`;
         finalAudioFileName = audioUploadResult.fileName;
         finalFileSize = audioUploadResult.fileSize;
         finalFileFormat = audioUploadResult.fileFormat;
@@ -349,14 +412,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       let finalCoverUrl = coverPreviewUrl || editingSong.coverImage || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop';
       if (coverFile) {
         showToast('Uploading cover image to storage...', 'info');
+        await storeLocalCoverFile(songId, coverFile);
         const coverUploadResult = await uploadCoverToStorage(coverFile, (percent) => {
           setCoverUploadProgress(percent);
         });
-        finalCoverUrl = coverUploadResult.downloadUrl;
+        finalCoverUrl = coverUploadResult.downloadUrl || finalCoverUrl;
       }
 
       const songPayload: Song = {
-        id: editingSong.id || `song-${Date.now()}`,
+        id: songId,
         title: editingSong.title,
         artist: editingSong.artist || 'Projects Mandatory',
         featuredArtists: editingSong.featuredArtists || '',
@@ -377,6 +441,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       };
 
       await saveSongToFirestore(songPayload);
+      try {
+        await publishNotificationToFirestore({
+          title: `New Song Added: ${songPayload.title}`,
+          body: `"${songPayload.title}" by ${songPayload.artist} is now available in the Projects Mandatory store!`,
+          category: 'listener',
+          type: 'release',
+          link: `/song/${songPayload.id}`,
+        });
+      } catch (err) {
+        console.warn('Notification broadcast note:', err);
+      }
       showToast(`"${songPayload.title}" saved to live catalog!`, 'success');
       setIsModalOpen(false);
     } catch (err: unknown) {
@@ -431,6 +506,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const pendingSubmissionsCount = submissions.filter((s) => s.status === 'PENDING').length;
   const pendingVerificationCount = artists.filter((a) => a.verificationStatus === 'PENDING_VERIFICATION').length;
   const unreadMessagesCount = contactMessages.filter((m) => !m.read).length;
+  const unreadNotifsCount = notifications.filter((n) => !n.read).length;
 
   const filteredSubmissions = submissions.filter((s) => {
     if (submissionFilter === 'ALL') return true;
@@ -544,6 +620,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
         {[
           { id: 'monetization', label: 'Monetisation & Royalties', icon: DollarSign },
+          { id: 'notifications', label: `Notifications (${notifications.length})`, icon: Bell, badge: unreadNotifsCount > 0 },
           { id: 'submissions', label: `Track Approvals (${pendingSubmissionsCount})`, icon: UploadCloud, badge: pendingSubmissionsCount > 0 },
           { id: 'verification', label: `Artist Verification (${pendingVerificationCount})`, icon: ShieldCheck, badge: pendingVerificationCount > 0 },
           { id: 'artists', label: `Artists & Payouts (${artists.length})`, icon: Users },
@@ -577,6 +654,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* TAB 0: MONETISATION & CREATOR ROYALTY POOL LEDGER */}
       {activeTab === 'monetization' && (
         <AdminMonetizationTab token={adminEmail || 'admin-auth-token'} />
+      )}
+
+      {/* TAB: REAL-TIME NOTIFICATIONS & BROADCASTS */}
+      {activeTab === 'notifications' && (
+        <AdminNotificationsTab notifications={notifications} />
       )}
 
       {/* TAB 1: ARTIST SONG SUBMISSIONS & APPROVALS */}

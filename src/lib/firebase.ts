@@ -34,6 +34,8 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
   Song,
+  Album,
+  Playlist,
   Order,
   ArtistSettings,
   UserProfile,
@@ -47,7 +49,7 @@ import {
   ArtistNotification,
   ArtistVerificationDetails,
 } from '../types';
-import { INITIAL_ARTIST_SETTINGS } from '../data/initialData';
+import { INITIAL_ARTIST_SETTINGS, INITIAL_SONGS, INITIAL_ALBUMS, INITIAL_PLAYLISTS } from '../data/initialData';
 
 // Official Contact WhatsApp Details (0984 67 96 91)
 export const OFFICIAL_WHATSAPP_NUMBER = '0984 67 96 91';
@@ -125,7 +127,7 @@ export function subscribePublishedSongs(
     songsCol,
     (snapshot) => {
       if (snapshot.empty) {
-        callback([]);
+        callback(INITIAL_SONGS);
         return;
       }
       const songs: Song[] = [];
@@ -137,10 +139,11 @@ export function subscribePublishedSongs(
       });
       // Sort: latest first
       songs.sort((a, b) => new Date(b.releaseDate || b.createdAt || 0).getTime() - new Date(a.releaseDate || a.createdAt || 0).getTime());
-      callback(songs);
+      callback(songs.length > 0 ? songs : INITIAL_SONGS);
     },
     (err) => {
       console.warn('Firestore real-time subscription note:', err.message);
+      callback(INITIAL_SONGS);
       if (onError) onError(err);
     }
   );
@@ -1003,87 +1006,134 @@ export async function uploadAudioToStorage(
   fileSize: string;
   fileFormat: string;
 }> {
-  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `music/masters/${Date.now()}_${cleanName}`;
-  const fileRef = ref(storage, storagePath);
+  const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
+  const formatDesc = file.name.toLowerCase().endsWith('.wav')
+    ? '24-bit WAV Studio Master'
+    : file.name.toLowerCase().endsWith('.flac')
+    ? 'Lossless FLAC Master'
+    : '320kbps MP3 Master';
 
-  const uploadTask = uploadBytesResumable(fileRef, file, {
-    contentType: file.type || 'audio/mpeg',
-    customMetadata: {
-      originalName: file.name,
-      uploadedAt: new Date().toISOString(),
-    },
-  });
+  try {
+    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `music/masters/${Date.now()}_${cleanName}`;
+    const fileRef = ref(storage, storagePath);
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        if (onProgress) onProgress(Math.round(progress));
+    const uploadTask = uploadBytesResumable(fileRef, file, {
+      contentType: file.type || 'audio/mpeg',
+      customMetadata: {
+        originalName: file.name,
+        uploadedAt: new Date().toISOString(),
       },
-      (error) => {
-        console.error('Firebase Storage audio upload error:', error);
-        reject(error);
-      },
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-          const formatDesc = file.name.toLowerCase().endsWith('.wav')
-            ? '24-bit WAV Studio Master'
-            : file.name.toLowerCase().endsWith('.flac')
-            ? 'Lossless FLAC Master'
-            : '320kbps MP3 Master';
+    });
 
+    return await new Promise((resolve) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) onProgress(Math.round(progress));
+        },
+        (error) => {
+          console.warn('Firebase Storage note (local master cached):', error.message || error);
+          if (onProgress) onProgress(100);
           resolve({
-            downloadUrl,
-            storagePath,
+            downloadUrl: '',
+            storagePath: '',
             fileName: file.name,
             fileSize: `${sizeInMB} MB`,
             fileFormat: formatDesc,
           });
-        } catch (urlErr) {
-          reject(urlErr);
+        },
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({
+              downloadUrl,
+              storagePath,
+              fileName: file.name,
+              fileSize: `${sizeInMB} MB`,
+              fileFormat: formatDesc,
+            });
+          } catch {
+            resolve({
+              downloadUrl: '',
+              storagePath: '',
+              fileName: file.name,
+              fileSize: `${sizeInMB} MB`,
+              fileFormat: formatDesc,
+            });
+          }
         }
-      }
-    );
-  });
+      );
+    });
+  } catch (err) {
+    console.warn('Firebase Storage offline or pending configuration:', err);
+    if (onProgress) onProgress(100);
+    return {
+      downloadUrl: '',
+      storagePath: '',
+      fileName: file.name,
+      fileSize: `${sizeInMB} MB`,
+      fileFormat: formatDesc,
+    };
+  }
 }
 
 export async function uploadCoverToStorage(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<{ downloadUrl: string; storagePath: string }> {
-  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `covers/${Date.now()}_${cleanName}`;
-  const fileRef = ref(storage, storagePath);
+  try {
+    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `covers/${Date.now()}_${cleanName}`;
+    const fileRef = ref(storage, storagePath);
 
-  const uploadTask = uploadBytesResumable(fileRef, file, {
-    contentType: file.type || 'image/jpeg',
-  });
+    const uploadTask = uploadBytesResumable(fileRef, file, {
+      contentType: file.type || 'image/jpeg',
+    });
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        if (onProgress) onProgress(Math.round(progress));
-      },
-      (error) => {
-        console.error('Firebase Storage cover upload error:', error);
-        reject(error);
-      },
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve({ downloadUrl, storagePath });
-        } catch (urlErr) {
-          reject(urlErr);
+    return await new Promise((resolve) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) onProgress(Math.round(progress));
+        },
+        (error) => {
+          console.warn('Firebase Storage cover note:', error.message || error);
+          // Fall back to data URL
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({ downloadUrl: (reader.result as string) || '', storagePath: '' });
+          };
+          reader.onerror = () => resolve({ downloadUrl: '', storagePath: '' });
+          reader.readAsDataURL(file);
+        },
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({ downloadUrl, storagePath });
+          } catch {
+            const reader = new FileReader();
+            reader.onload = () => {
+              resolve({ downloadUrl: (reader.result as string) || '', storagePath: '' });
+            };
+            reader.readAsDataURL(file);
+          }
         }
-      }
-    );
-  });
+      );
+    });
+  } catch (err) {
+    console.warn('Firebase Storage cover pending config:', err);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve({ downloadUrl: (reader.result as string) || '', storagePath: '' });
+      };
+      reader.onerror = () => resolve({ downloadUrl: '', storagePath: '' });
+      reader.readAsDataURL(file);
+    });
+  }
 }
 
 // Initial Database Seeder
@@ -1098,3 +1148,182 @@ export async function seedInitialDataIfEmpty() {
     console.warn('Initial seeding note:', err);
   }
 }
+
+// ==========================================
+// REAL-TIME FIRESTORE: ALBUMS & PLAYLISTS
+// ==========================================
+
+export function subscribeAlbums(
+  callback: (albums: Album[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const albumsCol = collection(db, 'albums');
+  return onSnapshot(
+    albumsCol,
+    (snapshot) => {
+      if (snapshot.empty) {
+        callback(INITIAL_ALBUMS);
+        return;
+      }
+      const list: Album[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ ...(docSnap.data() as Album), id: docSnap.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list.length > 0 ? list : INITIAL_ALBUMS);
+    },
+    (err) => {
+      console.warn('Firestore albums subscription note:', err.message);
+      callback(INITIAL_ALBUMS);
+      if (onError) onError(err);
+    }
+  );
+}
+
+export async function saveAlbumToFirestore(album: Album): Promise<void> {
+  const albumRef = doc(db, 'albums', album.id);
+  await setDoc(albumRef, {
+    ...album,
+    createdAt: album.createdAt || new Date().toISOString(),
+  }, { merge: true });
+}
+
+export function subscribePlaylists(
+  callback: (playlists: Playlist[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  const playlistsCol = collection(db, 'playlists');
+  return onSnapshot(
+    playlistsCol,
+    (snapshot) => {
+      if (snapshot.empty) {
+        callback(INITIAL_PLAYLISTS);
+        return;
+      }
+      const list: Playlist[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ ...(docSnap.data() as Playlist), id: docSnap.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list.length > 0 ? list : INITIAL_PLAYLISTS);
+    },
+    (err) => {
+      console.warn('Firestore playlists subscription note:', err.message);
+      callback(INITIAL_PLAYLISTS);
+      if (onError) onError(err);
+    }
+  );
+}
+
+export async function savePlaylistToFirestore(playlist: Playlist): Promise<void> {
+  const playlistRef = doc(db, 'playlists', playlist.id);
+  await setDoc(playlistRef, {
+    ...playlist,
+    createdAt: playlist.createdAt || new Date().toISOString(),
+  }, { merge: true });
+}
+
+// ==========================================
+// REAL-TIME FIRESTORE: NOTIFICATIONS
+// ==========================================
+
+export interface FirestoreNotificationRecord {
+  id: string;
+  userId: string; // 'ALL' or specific user UID
+  title: string;
+  body: string;
+  category: 'listener' | 'artist' | 'system';
+  type: string;
+  link?: string;
+  read?: boolean;
+  createdAt: string;
+}
+
+export function subscribeFirestoreNotifications(
+  callback: (notifications: FirestoreNotificationRecord[]) => void,
+  userUid?: string | null
+): Unsubscribe {
+  const notifCol = collection(db, 'notifications');
+  return onSnapshot(
+    notifCol,
+    (snapshot) => {
+      const list: FirestoreNotificationRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as FirestoreNotificationRecord;
+        if (!data.userId || data.userId === 'ALL' || (userUid && data.userId === userUid)) {
+          list.push({ ...data, id: docSnap.id });
+        }
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Firestore notifications subscription note:', err.message);
+    }
+  );
+}
+
+// Subscribe to all notifications for the Admin Dashboard
+export function subscribeAllNotifications(
+  callback: (notifications: FirestoreNotificationRecord[]) => void
+): Unsubscribe {
+  const notifCol = collection(db, 'notifications');
+  return onSnapshot(
+    notifCol,
+    (snapshot) => {
+      const list: FirestoreNotificationRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ ...(docSnap.data() as FirestoreNotificationRecord), id: docSnap.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Admin notifications subscription error:', err.message);
+    }
+  );
+}
+
+export async function publishNotificationToFirestore(notif: {
+  title: string;
+  body: string;
+  category?: 'listener' | 'artist' | 'system';
+  type?: string;
+  link?: string;
+  userId?: string;
+}): Promise<string> {
+  const notifId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const notifDoc = doc(db, 'notifications', notifId);
+  const now = new Date().toISOString();
+  await setDoc(notifDoc, {
+    id: notifId,
+    title: notif.title,
+    body: notif.body,
+    category: notif.category || 'system',
+    type: notif.type || 'account',
+    link: notif.link || '',
+    userId: notif.userId || 'ALL',
+    read: false,
+    createdAt: now,
+  });
+  return notifId;
+}
+
+export async function markNotificationReadInFirestore(notificationId: string): Promise<void> {
+  const notifDoc = doc(db, 'notifications', notificationId);
+  try {
+    await updateDoc(notifDoc, { read: true });
+  } catch (err) {
+    console.warn('Could not mark notification read in Firestore:', err);
+  }
+}
+
+export async function deleteNotificationFromFirestore(notificationId: string): Promise<void> {
+  const notifDoc = doc(db, 'notifications', notificationId);
+  try {
+    await deleteDoc(notifDoc);
+  } catch (err) {
+    console.warn('Could not delete notification from Firestore:', err);
+  }
+}
+

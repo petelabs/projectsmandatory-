@@ -1,4 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import {
+  subscribeFirestoreNotifications,
+  publishNotificationToFirestore,
+  markNotificationReadInFirestore,
+  deleteNotificationFromFirestore,
+  FirestoreNotificationRecord,
+} from '../lib/firebase';
+import { useAuth } from './AuthContext';
 
 export type NotificationType =
   | 'release'
@@ -10,7 +18,8 @@ export type NotificationType =
   | 'milestone'
   | 'campaign'
   | 'royalty'
-  | 'payout';
+  | 'payout'
+  | 'announcement';
 
 export type NotificationCategory = 'listener' | 'artist' | 'system';
 
@@ -22,7 +31,7 @@ export interface AppNotification {
   category: NotificationCategory;
   type: NotificationType;
   read: boolean;
-  link?: string; // route path e.g. "/song/song-sikono" or "/pricing"
+  link?: string; // route path e.g. "/song/123" or "/pricing"
 }
 
 export interface NotificationPreferences {
@@ -41,62 +50,9 @@ interface NotificationContextType {
   markAllAsRead: () => void;
   deleteNotification: (id: string) => void;
   clearAll: () => void;
-  addNotification: (notif: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => void;
+  addNotification: (notif: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => Promise<string>;
   updatePreferences: (newPrefs: Partial<NotificationPreferences>) => void;
 }
-
-const INITIAL_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'notif-1',
-    title: '🎵 New Track: Sikono (Acoustic Version)',
-    body: 'Bwalya Musik just dropped an exclusive acoustic record!',
-    timestamp: '10m ago',
-    category: 'listener',
-    type: 'release',
-    read: false,
-    link: '/song/song-sikono',
-  },
-  {
-    id: 'notif-2',
-    title: '✅ Download Completed: Tiyende',
-    body: 'Tiyende by Driemo is now saved in your offline library.',
-    timestamp: '2h ago',
-    category: 'listener',
-    type: 'download',
-    read: false,
-    link: '/library',
-  },
-  {
-    id: 'notif-3',
-    title: '🎉 Royalty Statement Available',
-    body: 'Your Q3 2026 stream royalties statement is ready for review in Artist Studio.',
-    timestamp: '1d ago',
-    category: 'artist',
-    type: 'royalty',
-    read: true,
-    link: '/artist/studio',
-  },
-  {
-    id: 'notif-[#4]',
-    title: '💳 Subscription Active',
-    body: 'Your Premium Plus plan is active. Enjoy ad-free 320kbps audio & offline downloads.',
-    timestamp: '3d ago',
-    category: 'listener',
-    type: 'subscription',
-    read: true,
-    link: '/pricing',
-  },
-  {
-    id: 'notif-5',
-    title: '⭐ 10,000 Stream Milestone!',
-    body: 'Congratulations! Your song "Sikono" crossed 10,000 qualified streams.',
-    timestamp: '5d ago',
-    category: 'artist',
-    type: 'milestone',
-    read: true,
-    link: '/artist/studio',
-  },
-];
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   newReleases: true,
@@ -109,13 +65,8 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem('pm_notifications');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_NOTIFICATIONS;
-  });
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const [preferences, setPreferences] = useState<NotificationPreferences>(() => {
     try {
@@ -125,11 +76,24 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return DEFAULT_PREFERENCES;
   });
 
+  // Real-time Firestore notifications subscription
   useEffect(() => {
-    try {
-      localStorage.setItem('pm_notifications', JSON.stringify(notifications));
-    } catch {}
-  }, [notifications]);
+    const unsubscribe = subscribeFirestoreNotifications((records) => {
+      const mapped: AppNotification[] = records.map((r) => ({
+        id: r.id,
+        title: r.title,
+        body: r.body,
+        timestamp: r.createdAt ? formatRelativeTime(r.createdAt) : 'Recent',
+        category: (r.category as NotificationCategory) || 'system',
+        type: (r.type as NotificationType) || 'account',
+        read: r.read || false,
+        link: r.link,
+      }));
+      setNotifications(mapped);
+    }, user?.id);
+
+    return () => unsubscribe();
+  }, [user?.id]);
 
   useEffect(() => {
     try {
@@ -139,33 +103,46 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAsRead = useCallback((id: string) => {
+  const markAsRead = useCallback(async (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    await markNotificationReadInFirestore(id);
   }, []);
 
-  const markAllAsRead = useCallback(() => {
+  const markAllAsRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    notifications.forEach((n) => {
+      if (!n.read) {
+        markNotificationReadInFirestore(n.id);
+      }
+    });
+  }, [notifications]);
 
-  const deleteNotification = useCallback((id: string) => {
+  const deleteNotification = useCallback(async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await deleteNotificationFromFirestore(id);
   }, []);
 
-  const clearAll = useCallback(() => {
+  const clearAll = useCallback(async () => {
+    notifications.forEach((n) => deleteNotificationFromFirestore(n.id));
     setNotifications([]);
-  }, []);
+  }, [notifications]);
 
-  const addNotification = useCallback((notif: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotif: AppNotification = {
-      ...notif,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      timestamp: 'Just now',
-      read: false,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-  }, []);
+  const addNotification = useCallback(
+    async (notif: Omit<AppNotification, 'id' | 'timestamp' | 'read'>): Promise<string> => {
+      const notifId = await publishNotificationToFirestore({
+        title: notif.title,
+        body: notif.body,
+        category: notif.category,
+        type: notif.type,
+        link: notif.link,
+        userId: user?.id || 'ALL',
+      });
+      return notifId;
+    },
+    [user?.id]
+  );
 
   const updatePreferences = useCallback((newPrefs: Partial<NotificationPreferences>) => {
     setPreferences((prev) => ({ ...prev, ...newPrefs }));
@@ -190,6 +167,23 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   );
 };
 
+function formatRelativeTime(dateString: string): string {
+  try {
+    const diffMs = Date.now() - new Date(dateString).getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(dateString).toLocaleDateString();
+  } catch {
+    return 'Recent';
+  }
+}
+
 export function useNotifications() {
   const context = useContext(NotificationContext);
   if (!context) {
@@ -197,3 +191,4 @@ export function useNotifications() {
   }
   return context;
 }
+

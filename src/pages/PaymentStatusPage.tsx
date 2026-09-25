@@ -4,6 +4,7 @@ import { Order } from '../types';
 import { api } from '../lib/api';
 import { useToast } from '../context/ToastContext';
 import { PayChanguLogo, PaymentMethodsBanner } from '../components/common/PaymentLogos';
+import { publishNotificationToFirestore } from '../lib/firebase';
 
 interface PaymentStatusPageProps {
   txRef: string;
@@ -40,6 +41,19 @@ export const PaymentStatusPage: React.FC<PaymentStatusPageProps> = ({
         setStatusMessage('Payment verified successfully! Your master recording is ready.');
         showToast('Payment verified successfully!', 'success');
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+        // Real notification dispatched to database
+        try {
+          publishNotificationToFirestore({
+            title: 'Payment Confirmed! 💳',
+            body: `Your payment of MK ${res.order?.amount?.toLocaleString() || '1,500'} for "${res.order?.songTitle || 'Studio Master Track'}" was confirmed. Your download is ready!`,
+            category: 'listener',
+            type: 'payment',
+            userId: (res.order as any)?.userId || res.order?.customerEmail || 'ALL',
+            link: `/download/${res.purchaseToken}`,
+          }).catch(() => {});
+        } catch {}
+
         setTimeout(() => {
           onPaymentSuccess(res.order, res.purchaseToken!);
         }, 1200);

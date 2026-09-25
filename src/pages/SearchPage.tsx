@@ -61,7 +61,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       const saved = localStorage.getItem('pm_recent_searches');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return ['Tiyende', 'Bwalya Musik', 'Afrobeats', 'Lulu'];
+    return ['Afrobeats', 'Amapiano', 'Hip-Hop', 'R&B'];
   });
 
   const saveRecentSearch = (text: string) => {
@@ -341,7 +341,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 Trending Searches
               </h2>
               <div className="flex flex-wrap gap-2">
-                {['Tiyende', 'Bwalya Musik', 'Sikono', 'Driemo', 'Malawi Folk', 'Amapiano'].map((tag) => (
+                {[
+                  'Afrobeats',
+                  'Amapiano',
+                  'Hip-Hop',
+                  'R&B',
+                  'Dancehall',
+                  'Afro-Pop',
+                  'Trap',
+                  'Lo-Fi',
+                  'Gospel',
+                  'Pop',
+                  'Drill',
+                ].map((tag) => (
                   <button
                     key={tag}
                     onClick={() => handleExecuteSearch(tag)}
@@ -361,21 +373,31 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             {/* Browse Categories & Genres */}
             <div className="space-y-3">
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Browse Genres & Moods
+                Browse Genres & Categories
               </h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                 {[
                   { name: 'Afrobeats', color: 'from-blue-600 to-indigo-700' },
-                  { name: 'Malawi Hits', color: 'from-emerald-600 to-teal-700' },
-                  { name: 'Gospel & Praise', color: 'from-amber-600 to-rose-700' },
+                  { name: 'Amapiano', color: 'from-amber-500 to-orange-600' },
                   { name: 'Hip-Hop', color: 'from-purple-600 to-pink-700' },
-                  { name: 'Chill Vibes', color: 'from-teal-600 to-cyan-700' },
-                  { name: 'Workout Energy', color: 'from-red-600 to-orange-700' },
+                  { name: 'R&B', color: 'from-rose-600 to-red-700' },
+                  { name: 'Dancehall', color: 'from-yellow-500 to-amber-700' },
+                  { name: 'Afro-Pop', color: 'from-emerald-600 to-teal-700' },
+                  { name: 'Reggae', color: 'from-green-600 to-emerald-800' },
+                  { name: 'Gospel', color: 'from-sky-500 to-blue-700' },
+                  { name: 'Trap', color: 'from-violet-700 to-indigo-900' },
+                  { name: 'Drill', color: 'from-slate-700 to-zinc-900' },
+                  { name: 'House', color: 'from-fuchsia-600 to-purple-800' },
+                  { name: 'Electronic', color: 'from-cyan-600 to-blue-600' },
+                  { name: 'Soul', color: 'from-orange-600 to-amber-800' },
+                  { name: 'Jazz', color: 'from-indigo-600 to-violet-800' },
+                  { name: 'Pop', color: 'from-pink-500 to-rose-600' },
+                  { name: 'Lo-Fi', color: 'from-teal-600 to-emerald-700' },
                 ].map((cat) => (
                   <div
                     key={cat.name}
                     onClick={() => handleExecuteSearch(cat.name)}
-                    className={`p-4 rounded-2xl bg-gradient-to-br ${cat.color} text-white font-bold text-sm cursor-pointer shadow-md hover:opacity-95 transition active:scale-98 flex items-end h-20`}
+                    className={`p-3.5 rounded-2xl bg-gradient-to-br ${cat.color} text-white font-bold text-xs sm:text-sm cursor-pointer shadow-sm hover:opacity-95 transition active:scale-98 flex items-end h-16 sm:h-20`}
                   >
                     <span>{cat.name}</span>
                   </div>

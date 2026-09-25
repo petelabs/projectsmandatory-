@@ -57,30 +57,7 @@ interface LibraryContextType {
   clearListeningHistory: () => void;
 }
 
-const DEFAULT_PLAYLISTS: Playlist[] = [
-  {
-    id: 'pl-chill-mw',
-    title: 'Chill Vibes Malawi',
-    description: 'Relaxing acoustic and modern Afro-fusion tracks from top Malawian talent.',
-    coverImage: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop',
-    curator: 'Projects Mandatory',
-    isEditorial: true,
-    isMalawiSpecial: true,
-    songIds: ['song-tiyende', 'song-sikono'],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pl-[#1455D9]',
-    title: 'Warm Heart Afrobeats',
-    description: 'Upbeat Afro-pop and urban bangers designed for summer drives and parties.',
-    coverImage: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
-    curator: 'Projects Mandatory',
-    isEditorial: true,
-    isMalawiSpecial: true,
-    songIds: ['song-sikono'],
-    createdAt: new Date().toISOString(),
-  },
-];
+const DEFAULT_PLAYLISTS: Playlist[] = [];
 
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 

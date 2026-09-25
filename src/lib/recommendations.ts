@@ -207,30 +207,21 @@ export function getSongsByMood(songs: Song[], moodName: string, limit = 6): Song
     .filter((s) => {
       if (s.moods && s.moods.some((m) => m.toLowerCase() === normalized)) return true;
       if (s.tags && s.tags.some((t) => t.toLowerCase() === normalized)) return true;
-      if (normalized === 'chill' && (s.genre === 'Malawi' || s.genre === 'R&B')) return true;
-      if (normalized === 'party' && (s.genre === 'Afrobeats' || s.genre === 'Afro-fusion')) return true;
-      if (normalized === 'workout' && (s.genre === 'Hip-Hop' || s.genre === 'Afrobeats')) return true;
-      if (normalized === 'relax' && (s.genre === 'Gospel' || s.genre === 'Malawi')) return true;
-      if (normalized === 'focus' && (s.genre === 'Gospel' || s.genre === 'R&B')) return true;
+      if (normalized === 'chill' && (s.genre === 'Lo-Fi' || s.genre === 'Soul' || s.genre === 'R&B' || s.genre === 'Jazz' || s.genre === 'Reggae')) return true;
+      if (normalized === 'party' && (s.genre === 'Afrobeats' || s.genre === 'Amapiano' || s.genre === 'Dancehall' || s.genre === 'House' || s.genre === 'Afro-Pop' || s.genre === 'Pop')) return true;
+      if (normalized === 'workout' && (s.genre === 'Hip-Hop' || s.genre === 'Trap' || s.genre === 'Drill' || s.genre === 'Electronic' || s.genre === 'House')) return true;
+      if (normalized === 'relax' && (s.genre === 'Gospel' || s.genre === 'Lo-Fi' || s.genre === 'Soul' || s.genre === 'Jazz' || s.genre === 'Reggae')) return true;
+      if (normalized === 'focus' && (s.genre === 'Lo-Fi' || s.genre === 'Electronic' || s.genre === 'Jazz' || s.genre === 'Gospel')) return true;
       return false;
     })
     .slice(0, limit);
 }
 
 /**
- * Filter Malawi-specific tracks
+ * Filter top popular tracks
  */
 export function getMalawiTopSongs(songs: Song[], limit = 6): Song[] {
-  return songs
-    .filter(
-      (s) =>
-        s.genre === 'Malawi' ||
-        (s.tags && s.tags.some((t) => t.toLowerCase() === 'malawi')) ||
-        s.artist.toLowerCase().includes('lulu') ||
-        s.artist.toLowerCase().includes('nkhata') ||
-        s.artist.toLowerCase().includes('bwalya') ||
-        s.artist.toLowerCase().includes('kizzo') ||
-        s.artist.toLowerCase().includes('driemo')
-    )
+  return [...songs]
+    .sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0))
     .slice(0, limit);
 }

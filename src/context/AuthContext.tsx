@@ -66,8 +66,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           activeRole,
         };
         setUser(mappedUser);
-        localStorage.setItem('pm_user_session', JSON.stringify(mappedUser));
-        await syncUserProfile(currentFirebaseUser);
+        try {
+          localStorage.setItem('pm_user_session', JSON.stringify(mappedUser));
+        } catch {}
+        setIsLoading(false);
+        syncUserProfile(currentFirebaseUser).catch(console.warn);
       } else {
         setFirebaseUser(null);
         // Check if manual/guest session was saved
@@ -85,8 +88,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch {
           setUser(null);
         }
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
