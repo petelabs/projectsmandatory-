@@ -127,7 +127,7 @@ export function subscribePublishedSongs(
     songsCol,
     (snapshot) => {
       if (snapshot.empty) {
-        callback(INITIAL_SONGS);
+        callback([]);
         return;
       }
       const songs: Song[] = [];
@@ -139,11 +139,11 @@ export function subscribePublishedSongs(
       });
       // Sort: latest first
       songs.sort((a, b) => new Date(b.releaseDate || b.createdAt || 0).getTime() - new Date(a.releaseDate || a.createdAt || 0).getTime());
-      callback(songs.length > 0 ? songs : INITIAL_SONGS);
+      callback(songs);
     },
     (err) => {
       console.warn('Firestore real-time subscription note:', err.message);
-      callback(INITIAL_SONGS);
+      callback([]);
       if (onError) onError(err);
     }
   );
@@ -1162,7 +1162,7 @@ export function subscribeAlbums(
     albumsCol,
     (snapshot) => {
       if (snapshot.empty) {
-        callback(INITIAL_ALBUMS);
+        callback([]);
         return;
       }
       const list: Album[] = [];
@@ -1170,11 +1170,11 @@ export function subscribeAlbums(
         list.push({ ...(docSnap.data() as Album), id: docSnap.id });
       });
       list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      callback(list.length > 0 ? list : INITIAL_ALBUMS);
+      callback(list);
     },
     (err) => {
       console.warn('Firestore albums subscription note:', err.message);
-      callback(INITIAL_ALBUMS);
+      callback([]);
       if (onError) onError(err);
     }
   );
@@ -1197,7 +1197,7 @@ export function subscribePlaylists(
     playlistsCol,
     (snapshot) => {
       if (snapshot.empty) {
-        callback(INITIAL_PLAYLISTS);
+        callback([]);
         return;
       }
       const list: Playlist[] = [];
@@ -1205,11 +1205,11 @@ export function subscribePlaylists(
         list.push({ ...(docSnap.data() as Playlist), id: docSnap.id });
       });
       list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      callback(list.length > 0 ? list : INITIAL_PLAYLISTS);
+      callback(list);
     },
     (err) => {
       console.warn('Firestore playlists subscription note:', err.message);
-      callback(INITIAL_PLAYLISTS);
+      callback([]);
       if (onError) onError(err);
     }
   );

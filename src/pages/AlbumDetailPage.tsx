@@ -51,7 +51,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
     (s) => (album.songIds && album.songIds.includes(s.id)) || s.albumId === album.id
   );
 
-  const displaySongs = albumSongs.length > 0 ? albumSongs : songs.slice(0, 4);
+  const displaySongs = albumSongs;
 
   const isAlbumCurrentlyPlaying =
     isPlaying && currentSong && displaySongs.some((s) => s.id === currentSong.id);
@@ -232,8 +232,14 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
             </span>
           </div>
 
-          <div className="space-y-1.5">
-            {displaySongs.map((song, index) => {
+          {displaySongs.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <Disc className="w-8 h-8 text-slate-400 mx-auto opacity-50" />
+              <p className="text-xs text-slate-400 font-medium">No tracks added to this album yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {displaySongs.map((song, index) => {
               const isThisPlaying = currentSong?.id === song.id && isPlaying;
 
               return (
@@ -301,6 +307,7 @@ export const AlbumDetailPage: React.FC<AlbumDetailPageProps> = ({
               );
             })}
           </div>
+          )}
         </div>
       </div>
 

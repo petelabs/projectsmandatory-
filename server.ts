@@ -63,310 +63,48 @@ let orders: Order[] = [...INITIAL_ORDERS];
 let artistSettings: ArtistSettings = { ...INITIAL_ARTIST_SETTINGS };
 let subscriptionPlans: SubscriptionPlan[] = [...DEFAULT_PLANS];
 let monetizationSettings: MonetizationSettings = { ...DEFAULT_MONETIZATION_SETTINGS };
-let userSubscriptions: UserSubscription[] = [
-  {
-    id: 'sub-demo-1',
-    userId: 'user_fan_1',
-    userEmail: 'kondwani@malawimusic.mw',
-    planId: 'premium',
-    planTier: 'PREMIUM',
-    status: 'ACTIVE',
-    amountMWK: 1000,
-    paymentMethod: 'AIRTEL_MONEY',
-    txRef: 'PM-SUB-DEMO-01',
-    startedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-    expiresAt: new Date(Date.now() + 20 * 86400000).toISOString(),
-    autoRenew: true,
-    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-  },
-  {
-    id: 'sub-demo-2',
-    userId: 'user_fan_2',
-    userEmail: 'chisomo@gmail.com',
-    planId: 'premium_plus',
-    planTier: 'PREMIUM_PLUS',
-    status: 'ACTIVE',
-    amountMWK: 2500,
-    paymentMethod: 'TNM_MPAMBA',
-    txRef: 'PM-SUB-DEMO-02',
-    startedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    expiresAt: new Date(Date.now() + 25 * 86400000).toISOString(),
-    autoRenew: true,
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-  },
-];
+let userSubscriptions: UserSubscription[] = [];
 
 let streamRecords: StreamRecord[] = [];
-let fraudFlags: FraudFlag[] = [
-  {
-    id: 'ff-sample-1',
-    songId: 'pm-song-sample',
-    reason: 'EXTREME_RAPID_PLAYS (8 skips under 3 seconds from same IP)',
-    severity: 'MEDIUM',
-    affectedStreamsCount: 8,
-    estimatedFlaggedAmountMWK: 0,
-    status: 'PENDING_REVIEW',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    adminNotes: 'Automated replay pattern detected by anti-fraud filter. Temporarily excluded from royalty pool calculations.',
-  },
-];
+let fraudFlags: FraudFlag[] = [];
 let tipRecords: TipRecord[] = [];
 let contentPurchases: ContentPurchase[] = [];
-let platformRevenueRecords: PlatformRevenueEntry[] = [
-  {
-    id: 'prev-1',
-    periodMonth: '2026-09',
-    source: 'SUBSCRIPTION_SHARE',
-    amountMWK: 1400,
-    description: '40% Platform allocation from active monthly subscriptions',
-    createdAt: new Date().toISOString(),
-  },
-];
+let platformRevenueRecords: PlatformRevenueEntry[] = [];
 
 // Phase 2 In-Memory Datastores
 let phase2AdminSettings: Phase2AdminSettings = { ...DEFAULT_PHASE2_ADMIN_SETTINGS };
-let artistProSubscriptions: ArtistProSubscription[] = [
-  {
-    id: 'pro-sub-demo-1',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    userId: 'user_artist_bwalya',
-    userEmail: 'bwalya@projectsmandatory.com',
-    planTier: 'ARTIST_PRO',
-    priceMWK: 5000,
-    status: 'ACTIVE',
-    paymentMethod: 'AIRTEL_MONEY',
-    txRef: 'PM-PRO-DEMO-01',
-    startedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    expiresAt: new Date(Date.now() + 25 * 86400000).toISOString(),
-    autoRenew: true,
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-  },
-];
-
-let promotionWallets: Map<string, PromotionWallet> = new Map([
-  [
-    'artist-bwalya',
-    {
-      id: 'artist-bwalya',
-      artistId: 'artist-bwalya',
-      artistName: 'Bwalya Musik',
-      availableBalanceMWK: 35000,
-      reservedBudgetMWK: 15000,
-      lifetimeSpentMWK: 25000,
-      lifetimeTopUpMWK: 75000,
-      lastTopUpDate: new Date(Date.now() - 2 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ],
-  [
-    'artist-kizzo',
-    {
-      id: 'artist-kizzo',
-      artistId: 'artist-kizzo',
-      artistName: 'Kizzo',
-      availableBalanceMWK: 12000,
-      reservedBudgetMWK: 0,
-      lifetimeSpentMWK: 8000,
-      lifetimeTopUpMWK: 20000,
-      lastTopUpDate: new Date(Date.now() - 7 * 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ],
-]);
-
-let promotionCampaigns: PromotionCampaign[] = [
-  {
-    id: 'camp-demo-1',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    userId: 'user_artist_bwalya',
-    songId: 'song-tiyende',
-    songTitle: 'Tiyende',
-    songCover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
-    targetPlacement: 'HOME_FEATURED',
-    budgetMWK: 15000,
-    spentMWK: 4500,
-    remainingBudgetMWK: 10500,
-    startDate: new Date(Date.now() - 3 * 86400000).toISOString(),
-    endDate: new Date(Date.now() + 11 * 86400000).toISOString(),
-    status: 'ACTIVE',
-    impressions: 1240,
-    clicks: 180,
-    playsGenerated: 310,
-    saves: 45,
-    followsGenerated: 28,
-    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-let promotionTransactions: PromotionTransaction[] = [
-  {
-    id: 'ptx-1',
-    artistId: 'artist-bwalya',
-    campaignId: 'camp-demo-1',
-    type: 'BUDGET_RESERVED',
-    amountMWK: 15000,
-    description: 'Reserved budget for Home Featured Campaign: Tiyende',
-    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-  },
-];
-
-let featuredPlacements: FeaturedPlacement[] = [
-  {
-    id: 'fp-demo-1',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    userId: 'user_artist_bwalya',
-    releaseType: 'SONG',
-    itemId: 'song-tiyende',
-    itemTitle: 'Tiyende',
-    itemCover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop',
-    genre: 'Afro-fusion',
-    placementSection: 'HOME_BANNER',
-    startDate: new Date(Date.now() - 2 * 86400000).toISOString(),
-    endDate: new Date(Date.now() + 12 * 86400000).toISOString(),
-    priceMWK: 10000,
-    status: 'ACTIVE',
-    paymentStatus: 'PAID',
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-];
-
-let giftSubscriptions: GiftSubscription[] = [
-  {
-    id: 'gift-demo-1',
-    senderUserId: 'user_fan_1',
-    senderName: 'Kondwani Banda',
-    senderEmail: 'kondwani@malawimusic.mw',
-    recipientName: 'Tadala Phiri',
-    recipientEmail: 'tadala@example.com',
-    planTier: 'PREMIUM_PLUS',
-    durationMonths: 3,
-    amountMWK: 7500,
-    giftCode: 'PM-PLUS-TADA',
-    giftMessage: 'Happy Birthday! Enjoy offline streaming on Projects Mandatory.',
-    paymentMethod: 'AIRTEL_MONEY',
-    txRef: 'PM-GIFT-DEMO-01',
-    status: 'PURCHASED',
-    expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
-    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
-  },
-];
-
+let artistProSubscriptions: ArtistProSubscription[] = [];
+let promotionWallets: Map<string, PromotionWallet> = new Map();
+let promotionCampaigns: PromotionCampaign[] = [];
+let promotionTransactions: PromotionTransaction[] = [];
+let featuredPlacements: FeaturedPlacement[] = [];
+let giftSubscriptions: GiftSubscription[] = [];
 let familyPlans: FamilyPlan[] = [];
 let familyMembers: FamilyMember[] = [];
+let artistMembershipPlans: ArtistMembershipPlan[] = [];
+let artistMemberships: ArtistMembershipSubscription[] = [];
+let merchProducts: MerchProduct[] = [];
+let eventRecords: EventRecord[] = [];
+let adminFinancialLogs: AdminFinancialLog[] = [];
 
-let artistMembershipPlans: ArtistMembershipPlan[] = [
-  {
-    id: 'plan-bwalya-vip',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    title: 'Bwalya Inner Circle',
-    description: 'Get unreleased acoustics, VIP studio live sessions, early access to new singles, and custom supporter badge in live chats and comments.',
-    priceMWK: 1500,
-    billingInterval: 'MONTHLY',
-    perks: [
-      'Exclusive unreleased acoustic recordings',
-      'Early access to all upcoming master singles 48h prior',
-      'Supporter badge on profile & comment threads',
-      'Behind-the-scenes Lilongwe studio sessions',
-    ],
-    isActive: true,
-    memberCount: 24,
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-  },
-];
-
-let artistMemberships: ArtistMembershipSubscription[] = [
-  {
-    id: 'mem-sub-1',
-    planId: 'plan-bwalya-vip',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    userId: 'user_fan_1',
-    userEmail: 'kondwani@malawimusic.mw',
-    userName: 'Kondwani Banda',
-    status: 'ACTIVE',
-    priceMWK: 1500,
-    artistShareMWK: 1275, // 85%
-    platformFeeMWK: 225, // 15%
-    txRef: 'PM-MEM-DEMO-01',
-    startedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-    expiresAt: new Date(Date.now() + 20 * 86400000).toISOString(),
-    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-  },
-];
-
-let merchProducts: MerchProduct[] = [
-  {
-    id: 'merch-1',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    title: 'Tiyende Official Studio Tee',
-    description: '100% premium cotton heavyweight concert t-shirt screenprinted in Blantyre.',
-    priceMWK: 15000,
-    imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=600&auto=format&fit=crop',
-    inventory: 50,
-    category: 'APPAREL',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-let eventRecords: EventRecord[] = [
-  {
-    id: 'event-1',
-    artistId: 'artist-bwalya',
-    artistName: 'Bwalya Musik',
-    eventName: 'Lilongwe Acoustic Live Session 2026',
-    description: 'An intimate evening of live acoustic Afro-fusion rhythms and special guest performances.',
-    venue: 'Bingu International Conference Centre (BICC)',
-    city: 'Lilongwe',
-    eventDate: '2026-05-15',
-    eventTime: '19:30',
-    ticketTypes: [
-      { name: 'Standard', priceMWK: 5000, capacity: 500, sold: 210 },
-      { name: 'VIP Golden Circle', priceMWK: 15000, capacity: 100, sold: 68 },
-    ],
-    totalCapacity: 600,
-    totalTicketsSold: 278,
-    status: 'UPCOMING',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-let adminFinancialLogs: AdminFinancialLog[] = [
-  {
-    id: 'afl-1',
-    adminEmail: 'alwaysgoodone265@gmail.com',
-    action: 'INITIALIZE_PHASE2_SETTINGS',
-    settingKey: 'GLOBAL_CONFIG',
-    previousValue: 'N/A',
-    newValue: 'Artist Pro + Promotions + Gifts + Memberships enabled',
-    timestamp: new Date().toISOString(),
-  },
-];
-
-// Current Monthly Royalty Period (September 2026)
+// Current Monthly Royalty Period
 const currentMonthKey = new Date().toISOString().slice(0, 7);
 let currentRoyaltyPeriod: RoyaltyPeriod = {
   id: `period-${currentMonthKey}`,
   month: currentMonthKey,
-  title: 'September 2026',
+  title: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
   startDate: `${currentMonthKey}-01T00:00:00.000Z`,
   endDate: `${currentMonthKey}-30T23:59:59.999Z`,
   status: 'ACTIVE',
-  totalSubscriptionRevenueMWK: 3500,
-  totalAdRevenueMWK: 1500,
-  eligibleRevenueMWK: 5000,
+  totalSubscriptionRevenueMWK: 0,
+  totalAdRevenueMWK: 0,
+  eligibleRevenueMWK: 0,
   creatorPoolPercentage: 60,
   platformPercentage: 40,
-  creatorRoyaltyPoolMWK: 3000, // 60% of eligible
-  platformRevenueMWK: 2000, // 40% of eligible
-  totalQualifyingStreams: 120,
-  totalFlaggedStreams: 8,
+  creatorRoyaltyPoolMWK: 0,
+  platformRevenueMWK: 0,
+  totalQualifyingStreams: 0,
+  totalFlaggedStreams: 0,
 };
 let royaltyPeriods: RoyaltyPeriod[] = [currentRoyaltyPeriod];
 let royaltyStatements: RoyaltyStatement[] = [];

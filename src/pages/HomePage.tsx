@@ -431,9 +431,46 @@ export const HomePage: React.FC<HomePageProps> = ({
         )}
 
         {/* ===================================================
+            FRESH EMPTY STATE (WHEN NO SONGS PUBLISHED YET)
+            =================================================== */}
+        {activeChip === 'All' && songs.length === 0 && (
+          <div className={`p-8 rounded-3xl text-center border space-y-4 my-4 ${
+            isDark ? 'bg-[#11151F] border-slate-800' : 'bg-white border-[#E5E7EB] shadow-sm'
+          }`}>
+            <div className="w-14 h-14 rounded-2xl bg-[#1455D9]/10 text-[#1455D9] flex items-center justify-center mx-auto">
+              <Music2 className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-[#111827]'}`}>
+                Welcome to Projects Mandatory
+              </h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                No tracks have been published yet. Independent artists can upload their uncompressed studio masters and earn 70% direct payouts.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => onNavigate('/artist/studio')}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#1455D9] text-white text-xs font-bold hover:bg-[#1146B8] transition active:scale-95 shadow-md"
+              >
+                Upload Music as Artist
+              </button>
+              <button
+                onClick={() => onNavigate('/pricing')}
+                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl border text-xs font-semibold transition active:scale-95 ${
+                  isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-[#E5E7EB] text-[#111827] hover:bg-slate-50'
+                }`}
+              >
+                View Streaming Plans
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================
             TRENDING NOW (HORIZONTAL CAROUSEL)
             =================================================== */}
-        {activeChip === 'All' && (
+        {activeChip === 'All' && trendingSongs.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2
@@ -537,7 +574,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* ===================================================
             NEW RELEASES (SONGS & ALBUMS TOGGLE)
             =================================================== */}
-        {activeChip === 'All' && (
+        {activeChip === 'All' && (newReleaseSongs.length > 0 || (albums && albums.length > 0)) && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -766,7 +803,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* ===================================================
             CURATED PLAYLISTS & MOODS
             =================================================== */}
-        {activeChip === 'All' && (
+        {activeChip === 'All' && playlists && playlists.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2
@@ -807,7 +844,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* ===================================================
             RISING ARTISTS & ARTISTS YOU MAY LIKE
             =================================================== */}
-        {activeChip === 'All' && (
+        {activeChip === 'All' && featuredArtists && featuredArtists.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2

@@ -18,39 +18,7 @@ export const ArtistsListPage: React.FC<ArtistsListPageProps> = ({
 
   useEffect(() => {
     const unsubscribe = subscribeAllArtists((list) => {
-      // If empty, ensure default verified creators are included
-      if (list.length === 0) {
-        setArtists([
-          {
-            id: 'jay-vibes',
-            userId: 'jay-vibes',
-            artistName: 'Jay Vibes',
-            email: 'jayvibes@projectsmandatory.com',
-            phone: '0984 67 96 91',
-            bio: 'Independent recording artist on Projects Mandatory. African contemporary afro-fusion & urban hits.',
-            genres: ['Afro-fusion', 'Urban Pop'],
-            avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop',
-            payoutDetails: {
-              accountType: 'AIRTEL_MONEY',
-              accountNumber: '0984 67 96 91',
-              accountName: 'Jay Vibes Music',
-            },
-            wallet: {
-              totalEarnedMWK: 0,
-              pendingPayoutMWK: 0,
-              totalPaidOutMWK: 0,
-              totalSongSalesCount: 0,
-              totalTipsReceivedMWK: 0,
-              totalSupportersCount: 0,
-            },
-            isVerified: true,
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-      } else {
-        setArtists(list);
-      }
+      setArtists(list || []);
     });
 
     return () => unsubscribe();
@@ -83,61 +51,85 @@ export const ArtistsListPage: React.FC<ArtistsListPageProps> = ({
         </button>
       </div>
 
-      {/* Artists Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {artists.map((artist) => (
-          <div
-            key={artist.id}
-            className="rounded-3xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition shadow-xl p-5 flex flex-col justify-between space-y-4 group"
-          >
-            <div className="space-y-3.5">
-              <div className="flex items-center gap-3.5">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border-2 border-rose-500/40 shrink-0 group-hover:scale-105 transition">
-                  <img
-                    src={artist.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=200&auto=format&fit=crop'}
-                    alt={artist.artistName}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-base font-bold text-white group-hover:text-rose-400 transition">
-                      {artist.artistName}
-                    </h3>
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+      {/* Artists Grid or Empty State */}
+      {artists.length === 0 ? (
+        <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-12 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+            <User className="w-8 h-8 opacity-70" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-lg font-bold text-white font-['Syne',sans-serif]">
+              No Verified Artists Yet
+            </h3>
+            <p className="text-xs text-slate-400">
+              Are you an independent Malawian musician or producer? Join as an artist to upload studio tracks, publish releases, and receive 70% direct payouts.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              onClick={onJoinAsArtist}
+              className="px-6 py-2.5 rounded-2xl bg-[#1455D9] hover:bg-[#1043ac] text-white font-bold text-xs uppercase tracking-wider transition shadow-lg active:scale-95"
+            >
+              Apply as Artist
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {artists.map((artist) => (
+            <div
+              key={artist.id}
+              className="rounded-3xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition shadow-xl p-5 flex flex-col justify-between space-y-4 group"
+            >
+              <div className="space-y-3.5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border-2 border-rose-500/40 shrink-0 group-hover:scale-105 transition">
+                    <img
+                      src={artist.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=200&auto=format&fit=crop'}
+                      alt={artist.artistName}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    {artist.genres?.join(', ') || 'Afro-fusion'}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="text-base font-bold text-white group-hover:text-rose-400 transition">
+                        {artist.artistName}
+                      </h3>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {artist.genres?.join(', ') || 'Afro-fusion'}
+                    </p>
+                  </div>
                 </div>
+
+                <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
+                  {artist.bio || 'Verified recording artist on Projects Mandatory.'}
+                </p>
               </div>
 
-              <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
-                {artist.bio || 'Verified recording artist on Projects Mandatory.'}
-              </p>
-            </div>
+              <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2">
+                <button
+                  onClick={() => onSelectArtist(artist.id)}
+                  className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                >
+                  <span>View Music</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
 
-            <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2">
-              <button
-                onClick={() => onSelectArtist(artist.id)}
-                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center justify-center gap-1.5"
-              >
-                <span>View Music</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                onClick={() => setSelectedArtistForSupport(artist)}
-                className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold transition flex items-center gap-1.5"
-                title="Support / Tip Artist"
-              >
-                <Heart className="w-3.5 h-3.5" />
-                <span>Tip</span>
-              </button>
+                <button
+                  onClick={() => setSelectedArtistForSupport(artist)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold transition flex items-center gap-1.5"
+                  title="Support / Tip Artist"
+                >
+                  <Heart className="w-3.5 h-3.5" />
+                  <span>Tip</span>
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Support Modal if triggered */}
       {selectedArtistForSupport && (
