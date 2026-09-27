@@ -48,6 +48,10 @@ import {
   BoostReferral,
   ArtistNotification,
   ArtistVerificationDetails,
+  ContentReport,
+  CopyrightReport,
+  ModerationAuditLog,
+  SecurityFlagRecord,
 } from '../types';
 import { INITIAL_ARTIST_SETTINGS, INITIAL_SONGS, INITIAL_ALBUMS, INITIAL_PLAYLISTS } from '../data/initialData';
 
@@ -1326,4 +1330,185 @@ export async function deleteNotificationFromFirestore(notificationId: string): P
     console.warn('Could not delete notification from Firestore:', err);
   }
 }
+
+// ==========================================
+// CONTENT REPORTING & COPYRIGHT FIRESTORE HELPERS
+// ==========================================
+
+export async function submitContentReportToFirestore(
+  reportData: Omit<ContentReport, 'id' | 'createdAt' | 'status' | 'resolutionAction'>
+): Promise<string> {
+  const reportId = `rep-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const reportRef = doc(db, 'reports', reportId);
+  const now = new Date().toISOString();
+
+  const newReport: ContentReport = {
+    ...reportData,
+    id: reportId,
+    status: 'PENDING',
+    resolutionAction: 'NONE',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await setDoc(reportRef, newReport);
+  return reportId;
+}
+
+export async function submitCopyrightClaimToFirestore(
+  claimData: Omit<CopyrightReport, 'id' | 'createdAt' | 'status' | 'actionTaken'>
+): Promise<string> {
+  const claimId = `cpr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const claimRef = doc(db, 'copyrightReports', claimId);
+  const now = new Date().toISOString();
+
+  const newClaim: CopyrightReport = {
+    ...claimData,
+    id: claimId,
+    status: 'SUBMITTED',
+    actionTaken: 'NONE',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await setDoc(claimRef, newClaim);
+  return claimId;
+}
+
+// Subscribe to a user's own submitted content reports
+export function subscribeUserContentReports(
+  userId: string,
+  callback: (reports: ContentReport[]) => void
+): Unsubscribe {
+  const reportsCol = collection(db, 'reports');
+  const q = query(reportsCol, where('reporterId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: ContentReport[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as ContentReport), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('User reports subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
+// Subscribe to a user's own copyright claims
+export function subscribeUserCopyrightClaims(
+  userId: string,
+  callback: (claims: CopyrightReport[]) => void
+): Unsubscribe {
+  const claimsCol = collection(db, 'copyrightReports');
+  const q = query(claimsCol, where('reporterId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: CopyrightReport[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as CopyrightReport), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('User copyright subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
+// Admin: Subscribe to all Content Reports
+export function subscribeAllContentReports(
+  callback: (reports: ContentReport[]) => void
+): Unsubscribe {
+  const reportsCol = collection(db, 'reports');
+  return onSnapshot(
+    reportsCol,
+    (snapshot) => {
+      const list: ContentReport[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as ContentReport), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('All reports subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
+// Admin: Subscribe to all Copyright Reports
+export function subscribeAllCopyrightReports(
+  callback: (claims: CopyrightReport[]) => void
+): Unsubscribe {
+  const claimsCol = collection(db, 'copyrightReports');
+  return onSnapshot(
+    claimsCol,
+    (snapshot) => {
+      const list: CopyrightReport[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as CopyrightReport), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('All copyright subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
+// Admin: Subscribe to Security Flags
+export function subscribeSecurityFlags(
+  callback: (flags: SecurityFlagRecord[]) => void
+): Unsubscribe {
+  const flagsCol = collection(db, 'securityFlags');
+  return onSnapshot(
+    flagsCol,
+    (snapshot) => {
+      const list: SecurityFlagRecord[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as SecurityFlagRecord), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Security flags subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
+// Admin: Subscribe to Moderation Audit Logs
+export function subscribeModerationAuditLogs(
+  callback: (logs: ModerationAuditLog[]) => void
+): Unsubscribe {
+  const auditCol = collection(db, 'moderationActions');
+  return onSnapshot(
+    auditCol,
+    (snapshot) => {
+      const list: ModerationAuditLog[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as ModerationAuditLog), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Audit logs subscription note:', err.message);
+      callback([]);
+    }
+  );
+}
+
 

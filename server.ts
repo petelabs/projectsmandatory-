@@ -42,6 +42,14 @@ import {
   PlatformRevenueEntry,
   AdminFinancialLog,
   Phase2AdminSettings,
+  ContentReport,
+  CopyrightReport,
+  ModerationAuditLog,
+  SecurityFlagRecord,
+  AdminDashboardMetrics,
+  Album,
+  Playlist,
+  ArtistProfile,
 } from './src/types';
 import {
   isR2Configured,
@@ -86,6 +94,15 @@ let artistMemberships: ArtistMembershipSubscription[] = [];
 let merchProducts: MerchProduct[] = [];
 let eventRecords: EventRecord[] = [];
 let adminFinancialLogs: AdminFinancialLog[] = [];
+
+// Content Moderation, Copyright & Security Datastores
+let contentReports: ContentReport[] = [];
+let copyrightReports: CopyrightReport[] = [];
+let moderationAuditLogs: ModerationAuditLog[] = [];
+let securityFlags: SecurityFlagRecord[] = [];
+let registeredArtists: ArtistProfile[] = [];
+let albumsStore: Album[] = [];
+let playlistsStore: Playlist[] = [];
 
 // Current Monthly Royalty Period
 const currentMonthKey = new Date().toISOString().slice(0, 7);
@@ -2598,6 +2615,508 @@ app.get('/api/admin/phase2/platform-revenue', requireAdmin, (req, res) => {
     breakdown,
     records: platformRevenueRecords,
   });
+});
+
+// ==========================================
+// 10. CONTENT REPORTING, COPYRIGHT & MODERATION
+// ==========================================
+
+// User submit content report (Songs, Albums, Artists, Playlists, Users)
+app.post('/api/reports', (req, res) => {
+  const {
+    reporterId,
+    reporterEmail,
+    reporterName,
+    targetType,
+    targetId,
+    targetTitle,
+    targetOwnerId,
+    targetOwnerName,
+    reason,
+    description,
+  } = req.body;
+
+  if (!targetType || !targetId || !reason) {
+    return res.status(400).json({ success: false, error: 'Target type, target ID, and reason are required.' });
+  }
+
+  const newReport: ContentReport = {
+    id: `rep-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    reporterId: reporterId || 'anonymous',
+    reporterEmail: reporterEmail || 'anonymous@listener.pm',
+    reporterName: reporterName || 'Community Listener',
+    targetType,
+    targetId,
+    targetTitle: targetTitle || 'Unknown Title',
+    targetOwnerId,
+    targetOwnerName,
+    reason,
+    description: (description || '').trim(),
+    status: 'PENDING',
+    resolutionAction: 'NONE',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  contentReports.unshift(newReport);
+
+  // Auto-flag abuse if repeated reports for same item
+  const existingForTarget = contentReports.filter(r => r.targetId === targetId);
+  if (existingForTarget.length >= 3) {
+    const existingFlag = securityFlags.find(f => f.targetId === targetId);
+    if (!existingFlag) {
+      securityFlags.unshift({
+        id: `sec-${Date.now()}`,
+        targetType: targetType === 'user' ? 'user' : (targetType as any),
+        targetId,
+        targetTitle: targetTitle || targetId,
+        flagType: 'REPEATED_REPORTS',
+        severity: existingForTarget.length >= 5 ? 'HIGH' : 'MEDIUM',
+        details: `Accumulated ${existingForTarget.length} independent community content reports for ${targetType}: "${targetTitle || targetId}".`,
+        status: 'OPEN',
+        reportedCount: existingForTarget.length,
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      existingFlag.reportedCount = existingForTarget.length;
+      if (existingForTarget.length >= 5) existingFlag.severity = 'HIGH';
+    }
+  }
+
+  res.json({ success: true, report: newReport });
+});
+
+// User submit formal DMCA/Copyright infringement takedown report
+app.post('/api/copyright-reports', (req, res) => {
+  const {
+    reporterId,
+    reporterEmail,
+    reporterName,
+    claimantName,
+    claimantEmail,
+    claimantPhone,
+    targetType,
+    targetId,
+    targetTitle,
+    originalWorkTitle,
+    originalWorkProofUrl,
+    infringementDescription,
+    declarationAccepted,
+  } = req.body;
+
+  if (!claimantName || !claimantEmail || !targetId || !declarationAccepted) {
+    return res.status(400).json({
+      success: false,
+      error: 'Claimant name, email, target ID, and signed declaration are required for copyright notices.',
+    });
+  }
+
+  const newClaim: CopyrightReport = {
+    id: `cpr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    reporterId: reporterId || 'claimant',
+    reporterEmail: claimantEmail,
+    reporterName: claimantName,
+    claimantName,
+    claimantEmail,
+    claimantPhone,
+    targetType: targetType || 'song',
+    targetId,
+    targetTitle: targetTitle || 'Unknown Work',
+    originalWorkTitle: originalWorkTitle || 'Original Recording',
+    originalWorkProofUrl: originalWorkProofUrl || '',
+    infringementDescription: (infringementDescription || '').trim(),
+    declarationAccepted: true,
+    status: 'SUBMITTED',
+    actionTaken: 'NONE',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  copyrightReports.unshift(newClaim);
+
+  // Security Flag for potential copyright dispute
+  securityFlags.unshift({
+    id: `sec-${Date.now()}`,
+    targetType: targetType || 'song',
+    targetId,
+    targetTitle: targetTitle || targetId,
+    flagType: 'ACCOUNT_ABUSE',
+    severity: 'HIGH',
+    details: `Formal copyright takedown filed by "${claimantName}" (${claimantEmail}) alleging infringement of "${originalWorkTitle}".`,
+    status: 'OPEN',
+    reportedCount: 1,
+    createdAt: new Date().toISOString(),
+  });
+
+  res.json({ success: true, report: newClaim });
+});
+
+// User fetch their own submitted reports (without leaking private admin notes)
+app.get('/api/user/my-reports', (req, res) => {
+  const userId = req.query.userId as string;
+  const userEmail = req.query.userEmail as string;
+
+  if (!userId && !userEmail) {
+    return res.json({ success: true, reports: [], copyrightReports: [] });
+  }
+
+  const userContentReports = contentReports
+    .filter(r => (userId && r.reporterId === userId) || (userEmail && r.reporterEmail.toLowerCase() === userEmail.toLowerCase()))
+    .map(r => ({
+      id: r.id,
+      targetType: r.targetType,
+      targetId: r.targetId,
+      targetTitle: r.targetTitle,
+      reason: r.reason,
+      status: r.status,
+      resolutionAction: r.resolutionAction,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+
+  const userCopyrightReports = copyrightReports
+    .filter(c => (userId && c.reporterId === userId) || (userEmail && c.claimantEmail.toLowerCase() === userEmail.toLowerCase()))
+    .map(c => ({
+      id: c.id,
+      targetType: c.targetType,
+      targetId: c.targetId,
+      targetTitle: c.targetTitle,
+      originalWorkTitle: c.originalWorkTitle,
+      status: c.status,
+      actionTaken: c.actionTaken,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    }));
+
+  res.json({ success: true, reports: userContentReports, copyrightReports: userCopyrightReports });
+});
+
+// ADMIN: Get Unified Platform & Moderation Overview Metrics
+app.get('/api/admin/overview-metrics', requireAdmin, (req, res) => {
+  const paidOrders = orders.filter(o => o.status === 'PAID');
+  const totalRevenueMWK = paidOrders.reduce((sum, o) => sum + o.amount, 0);
+  const activeSubs = userSubscriptions.filter(s => s.status === 'ACTIVE');
+
+  const metrics: AdminDashboardMetrics = {
+    totalUsers: new Set(orders.map(o => o.customerEmail)).size + activeSubs.length,
+    activeSubscribers: activeSubs.length,
+    verifiedArtists: registeredArtists.filter(a => a.isVerified).length,
+    liveTracks: songs.filter(s => s.isPublished && s.moderationStatus !== 'HIDDEN' && s.moderationStatus !== 'TAKEDOWN_COPYRIGHT').length,
+    liveAlbums: albumsStore.length,
+    pendingContentReports: contentReports.filter(r => r.status === 'PENDING' || r.status === 'UNDER_REVIEW').length,
+    pendingCopyrightReports: copyrightReports.filter(c => c.status === 'SUBMITTED' || c.status === 'UNDER_REVIEW').length,
+    activeAbuseFlags: securityFlags.filter(f => f.status === 'OPEN' || f.status === 'INVESTIGATING').length,
+    totalRevenueMWK,
+    creatorRoyaltyPoolMWK: currentRoyaltyPeriod.creatorRoyaltyPoolMWK || 0,
+  };
+
+  res.json({ success: true, metrics });
+});
+
+// ADMIN: Get Content Reports list
+app.get('/api/admin/reports', requireAdmin, (req, res) => {
+  const { status, targetType, search, limit = '50', offset = '0' } = req.query;
+
+  let filtered = [...contentReports];
+
+  if (status && status !== 'ALL') {
+    filtered = filtered.filter(r => r.status === status);
+  }
+
+  if (targetType && targetType !== 'ALL') {
+    filtered = filtered.filter(r => r.targetType === targetType);
+  }
+
+  if (search) {
+    const q = String(search).toLowerCase();
+    filtered = filtered.filter(
+      r =>
+        r.targetTitle.toLowerCase().includes(q) ||
+        r.reporterEmail.toLowerCase().includes(q) ||
+        r.reporterName.toLowerCase().includes(q) ||
+        r.reason.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q)
+    );
+  }
+
+  const start = Number(offset) || 0;
+  const end = start + (Number(limit) || 50);
+
+  res.json({
+    success: true,
+    total: filtered.length,
+    reports: filtered.slice(start, end),
+  });
+});
+
+// ADMIN: Review Content Report & execute moderation action
+app.post('/api/admin/reports/:id/review', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { status, resolutionAction, moderationNotes, adminEmail } = req.body;
+
+  const report = contentReports.find(r => r.id === id);
+  if (!report) {
+    return res.status(404).json({ success: false, error: 'Report not found.' });
+  }
+
+  if (status) report.status = status;
+  if (resolutionAction) report.resolutionAction = resolutionAction;
+  if (moderationNotes !== undefined) report.moderationNotes = moderationNotes;
+  report.reviewedBy = adminEmail || 'Admin';
+  report.reviewedAt = new Date().toISOString();
+  report.updatedAt = new Date().toISOString();
+
+  // Execute resolution consequences on content
+  if (resolutionAction === 'CONTENT_HIDDEN') {
+    if (report.targetType === 'song') {
+      const targetSong = songs.find(s => s.id === report.targetId);
+      if (targetSong) {
+        targetSong.isPublished = false;
+        targetSong.moderationStatus = 'HIDDEN';
+        targetSong.moderationReason = `Hidden by moderator: ${report.reason}. ${moderationNotes || ''}`;
+      }
+    } else if (report.targetType === 'album') {
+      const targetAlbum = albumsStore.find(a => a.id === report.targetId);
+      if (targetAlbum) {
+        targetAlbum.moderationStatus = 'HIDDEN';
+      }
+    }
+  } else if (resolutionAction === 'CONTENT_RESTORED') {
+    if (report.targetType === 'song') {
+      const targetSong = songs.find(s => s.id === report.targetId);
+      if (targetSong) {
+        targetSong.isPublished = true;
+        targetSong.moderationStatus = 'APPROVED';
+        delete targetSong.moderationReason;
+      }
+    }
+  }
+
+  // Record immutable audit log
+  moderationAuditLogs.unshift({
+    id: `aud-${Date.now()}`,
+    adminEmail: adminEmail || 'Admin',
+    action: resolutionAction === 'CONTENT_HIDDEN' ? 'HIDE_CONTENT' : resolutionAction === 'CONTENT_RESTORED' ? 'RESTORE_CONTENT' : 'UPDATE_MODERATION_STATUS',
+    targetType: report.targetType,
+    targetId: report.targetId,
+    targetTitle: report.targetTitle,
+    reason: `Report ${report.id} reviewed. Status: ${status}. Action: ${resolutionAction}. ${moderationNotes || ''}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, report });
+});
+
+// ADMIN: Get Copyright Takedown Reports
+app.get('/api/admin/copyright-reports', requireAdmin, (req, res) => {
+  const { status, search, limit = '50' } = req.query;
+
+  let filtered = [...copyrightReports];
+
+  if (status && status !== 'ALL') {
+    filtered = filtered.filter(c => c.status === status);
+  }
+
+  if (search) {
+    const q = String(search).toLowerCase();
+    filtered = filtered.filter(
+      c =>
+        c.targetTitle.toLowerCase().includes(q) ||
+        c.claimantName.toLowerCase().includes(q) ||
+        c.claimantEmail.toLowerCase().includes(q) ||
+        c.originalWorkTitle.toLowerCase().includes(q)
+    );
+  }
+
+  res.json({ success: true, reports: filtered.slice(0, Number(limit) || 50) });
+});
+
+// ADMIN: Review Copyright Report (Request more info, takedown, restore, reject)
+app.post('/api/admin/copyright-reports/:id/review', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { status, actionTaken, moderationNotes, adminEmail } = req.body;
+
+  const claim = copyrightReports.find(c => c.id === id);
+  if (!claim) {
+    return res.status(404).json({ success: false, error: 'Copyright claim not found.' });
+  }
+
+  if (status) claim.status = status;
+  if (actionTaken) claim.actionTaken = actionTaken;
+  if (moderationNotes !== undefined) claim.moderationNotes = moderationNotes;
+  claim.reviewedBy = adminEmail || 'Admin';
+  claim.reviewedAt = new Date().toISOString();
+  claim.updatedAt = new Date().toISOString();
+
+  // Execute copyright action on actual music release
+  if (actionTaken === 'CONTENT_TAKEDOWN') {
+    const targetSong = songs.find(s => s.id === claim.targetId);
+    if (targetSong) {
+      targetSong.isPublished = false;
+      targetSong.moderationStatus = 'TAKEDOWN_COPYRIGHT';
+      targetSong.moderationReason = `Content taken down due to copyright claim by ${claim.claimantName}. Notice ID: ${claim.id}`;
+    }
+  } else if (actionTaken === 'CONTENT_RESTORED') {
+    const targetSong = songs.find(s => s.id === claim.targetId);
+    if (targetSong) {
+      targetSong.isPublished = true;
+      targetSong.moderationStatus = 'APPROVED';
+      delete targetSong.moderationReason;
+    }
+  }
+
+  // Audit trail
+  moderationAuditLogs.unshift({
+    id: `aud-${Date.now()}`,
+    adminEmail: adminEmail || 'Admin',
+    action: actionTaken === 'CONTENT_TAKEDOWN' ? 'COPYRIGHT_TAKEDOWN' : actionTaken === 'CONTENT_RESTORED' ? 'COPYRIGHT_RESTORE' : 'UPDATE_MODERATION_STATUS',
+    targetType: claim.targetType,
+    targetId: claim.targetId,
+    targetTitle: claim.targetTitle,
+    reason: `Copyright notice ${claim.id} decided. Status: ${status}. Action: ${actionTaken}. Notes: ${moderationNotes || 'None'}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, report: claim });
+});
+
+// ADMIN: Direct Content Moderation Status Toggle (Hide / Restore / Flag)
+app.post('/api/admin/moderation/content-status', requireAdmin, (req, res) => {
+  const { targetType, targetId, status, reason, adminEmail } = req.body;
+
+  if (!targetType || !targetId || !status) {
+    return res.status(400).json({ success: false, error: 'Target type, ID, and new status are required.' });
+  }
+
+  let foundTitle = targetId;
+
+  if (targetType === 'song') {
+    const song = songs.find(s => s.id === targetId);
+    if (song) {
+      foundTitle = song.title;
+      song.moderationStatus = status;
+      song.isPublished = status === 'APPROVED';
+      if (status === 'HIDDEN' || status === 'TAKEDOWN_COPYRIGHT') {
+        song.moderationReason = reason || 'Hidden by admin moderation';
+      } else {
+        delete song.moderationReason;
+      }
+    }
+  } else if (targetType === 'album') {
+    const album = albumsStore.find(a => a.id === targetId);
+    if (album) {
+      foundTitle = album.title;
+      album.moderationStatus = status;
+    }
+  }
+
+  moderationAuditLogs.unshift({
+    id: `aud-${Date.now()}`,
+    adminEmail: adminEmail || 'Admin',
+    action: status === 'HIDDEN' ? 'HIDE_CONTENT' : 'RESTORE_CONTENT',
+    targetType,
+    targetId,
+    targetTitle: foundTitle,
+    reason: reason || `Moderator updated status to ${status}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, message: `Content status updated to ${status}.` });
+});
+
+// ADMIN: User / Artist Account Moderation (Suspend / Reinstate)
+app.post('/api/admin/moderation/user-status', requireAdmin, (req, res) => {
+  const { userId, status, reason, adminEmail } = req.body;
+
+  if (!userId || !status) {
+    return res.status(400).json({ success: false, error: 'User ID and status are required.' });
+  }
+
+  const artist = registeredArtists.find(a => a.id === userId || a.userId === userId);
+  if (artist) {
+    artist.status = status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE';
+  }
+
+  moderationAuditLogs.unshift({
+    id: `aud-${Date.now()}`,
+    adminEmail: adminEmail || 'Admin',
+    action: status === 'SUSPENDED' ? 'SUSPENDED' as any : 'REINSTATE_USER',
+    targetType: 'user',
+    targetId: userId,
+    targetTitle: artist ? artist.artistName : userId,
+    reason: reason || `Admin set account status to ${status}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, message: `Account status updated to ${status}.` });
+});
+
+// ADMIN: Get Moderation Audit Logs
+app.get('/api/admin/audit-logs', requireAdmin, (req, res) => {
+  const { search, action, limit = '50' } = req.query;
+
+  let filtered = [...moderationAuditLogs];
+
+  if (action && action !== 'ALL') {
+    filtered = filtered.filter(l => l.action === action);
+  }
+
+  if (search) {
+    const q = String(search).toLowerCase();
+    filtered = filtered.filter(
+      l =>
+        l.targetTitle.toLowerCase().includes(q) ||
+        l.adminEmail.toLowerCase().includes(q) ||
+        l.reason.toLowerCase().includes(q)
+    );
+  }
+
+  res.json({ success: true, logs: filtered.slice(0, Number(limit) || 50) });
+});
+
+// ADMIN: Get Platform Security & Abuse Flags
+app.get('/api/admin/security-flags', requireAdmin, (req, res) => {
+  const { status, severity } = req.query;
+
+  let filtered = [...securityFlags];
+
+  if (status && status !== 'ALL') {
+    filtered = filtered.filter(f => f.status === status);
+  }
+
+  if (severity && severity !== 'ALL') {
+    filtered = filtered.filter(f => f.severity === severity);
+  }
+
+  res.json({ success: true, flags: filtered });
+});
+
+// ADMIN: Resolve Security Flag
+app.post('/api/admin/security-flags/:id/resolve', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { status, adminNotes, adminEmail } = req.body;
+
+  const flag = securityFlags.find(f => f.id === id);
+  if (!flag) {
+    return res.status(404).json({ success: false, error: 'Security flag record not found.' });
+  }
+
+  flag.status = status || 'RESOLVED';
+  if (adminNotes) flag.adminNotes = adminNotes;
+  flag.updatedAt = new Date().toISOString();
+
+  moderationAuditLogs.unshift({
+    id: `aud-${Date.now()}`,
+    adminEmail: adminEmail || 'Admin',
+    action: 'RESOLVE_SECURITY_FLAG',
+    targetType: flag.targetType as any,
+    targetId: flag.targetId,
+    targetTitle: flag.targetTitle,
+    reason: `Security flag ${id} (${flag.flagType}) marked as ${flag.status}. ${adminNotes || ''}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, flag });
 });
 
 

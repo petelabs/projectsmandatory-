@@ -15,6 +15,11 @@ import {
   TipRecord,
   AdminMonetizationSummary,
   SubscriptionTier,
+  ContentReport,
+  CopyrightReport,
+  ModerationAuditLog,
+  SecurityFlagRecord,
+  AdminDashboardMetrics,
 } from '../types';
 import {
   db,
@@ -1382,6 +1387,285 @@ export const api = {
     } catch {
       return { success: true, totalRevenueMWK: 0, breakdown: {}, records: [] };
     }
+  },
+
+  // ==========================================
+  // MODERATION, COPYRIGHT & ABUSE REPORTING
+  // ==========================================
+
+  async submitReport(payload: {
+    reporterId?: string;
+    reporterEmail?: string;
+    reporterName?: string;
+    targetType: string;
+    targetId: string;
+    targetTitle: string;
+    targetOwnerId?: string;
+    targetOwnerName?: string;
+    reason: string;
+    description?: string;
+  }): Promise<{ success: boolean; report?: ContentReport; error?: string }> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; report?: ContentReport; error?: string }>('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return data;
+    } catch {
+      // Direct Firestore fallback
+      try {
+        const reportId = `rep-${Date.now()}`;
+        const ref = doc(db, 'reports', reportId);
+        const report: ContentReport = {
+          id: reportId,
+          reporterId: payload.reporterId || 'anonymous',
+          reporterEmail: payload.reporterEmail || '',
+          reporterName: payload.reporterName || 'Listener',
+          targetType: payload.targetType as any,
+          targetId: payload.targetId,
+          targetTitle: payload.targetTitle,
+          reason: payload.reason as any,
+          description: payload.description || '',
+          status: 'PENDING',
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(ref, report);
+        return { success: true, report };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+  },
+
+  async submitCopyrightReport(payload: {
+    reporterId?: string;
+    claimantName: string;
+    claimantEmail: string;
+    claimantPhone?: string;
+    targetType: string;
+    targetId: string;
+    targetTitle: string;
+    originalWorkTitle: string;
+    originalWorkProofUrl: string;
+    infringementDescription: string;
+    declarationAccepted: boolean;
+  }): Promise<{ success: boolean; report?: CopyrightReport; error?: string }> {
+    try {
+      const data = await fetchSafeJson<{ success: boolean; report?: CopyrightReport; error?: string }>('/api/copyright-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return data;
+    } catch {
+      // Direct Firestore fallback
+      try {
+        const claimId = `cpr-${Date.now()}`;
+        const ref = doc(db, 'copyrightReports', claimId);
+        const claim: CopyrightReport = {
+          id: claimId,
+          reporterId: payload.reporterId || 'claimant',
+          reporterEmail: payload.claimantEmail,
+          reporterName: payload.claimantName,
+          claimantName: payload.claimantName,
+          claimantEmail: payload.claimantEmail,
+          claimantPhone: payload.claimantPhone,
+          targetType: payload.targetType as any,
+          targetId: payload.targetId,
+          targetTitle: payload.targetTitle,
+          originalWorkTitle: payload.originalWorkTitle,
+          originalWorkProofUrl: payload.originalWorkProofUrl,
+          infringementDescription: payload.infringementDescription,
+          declarationAccepted: payload.declarationAccepted,
+          status: 'SUBMITTED',
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(ref, claim);
+        return { success: true, report: claim };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+  },
+
+  async getMyReports(userId?: string, userEmail?: string) {
+    try {
+      const queryParams = new URLSearchParams();
+      if (userId) queryParams.set('userId', userId);
+      if (userEmail) queryParams.set('userEmail', userEmail);
+      const data = await fetchSafeJson<{ success: boolean; reports: any[]; copyrightReports: any[] }>(
+        `/api/user/my-reports?${queryParams.toString()}`
+      );
+      return data;
+    } catch {
+      return { success: true, reports: [], copyrightReports: [] };
+    }
+  },
+
+  // Admin APIs (Protected with Admin Token)
+  async adminGetOverviewMetrics(token?: string) {
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const data = await fetchSafeJson<{ success: boolean; metrics: AdminDashboardMetrics }>(
+        '/api/admin/overview-metrics',
+        { headers }
+      );
+      return data;
+    } catch {
+      return {
+        success: true,
+        metrics: {
+          totalUsers: 0,
+          activeSubscribers: 0,
+          verifiedArtists: 0,
+          liveTracks: 0,
+          liveAlbums: 0,
+          pendingContentReports: 0,
+          pendingCopyrightReports: 0,
+          activeAbuseFlags: 0,
+          totalRevenueMWK: 0,
+          creatorRoyaltyPoolMWK: 0,
+        },
+      };
+    }
+  },
+
+  async adminGetReports(token?: string, params?: { status?: string; targetType?: string; search?: string }) {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.targetType) q.set('targetType', params.targetType);
+      if (params?.search) q.set('search', params.search);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const data = await fetchSafeJson<{ success: boolean; reports: ContentReport[]; total: number }>(
+        `/api/admin/reports?${q.toString()}`,
+        { headers }
+      );
+      return data;
+    } catch {
+      return { success: true, reports: [], total: 0 };
+    }
+  },
+
+  async adminReviewReport(token: string | undefined, id: string, payload: {
+    status?: string;
+    resolutionAction?: string;
+    moderationNotes?: string;
+    adminEmail?: string;
+  }) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetchSafeJson<{ success: boolean; report?: ContentReport; error?: string }>(
+      `/api/admin/reports/${id}/review`,
+      { method: 'POST', headers, body: JSON.stringify(payload) }
+    );
+  },
+
+  async adminGetCopyrightReports(token?: string, params?: { status?: string; search?: string }) {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.search) q.set('search', params.search);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      return fetchSafeJson<{ success: boolean; reports: CopyrightReport[] }>(
+        `/api/admin/copyright-reports?${q.toString()}`,
+        { headers }
+      );
+    } catch {
+      return { success: true, reports: [] };
+    }
+  },
+
+  async adminReviewCopyrightReport(token: string | undefined, id: string, payload: {
+    status?: string;
+    actionTaken?: string;
+    moderationNotes?: string;
+    adminEmail?: string;
+  }) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetchSafeJson<{ success: boolean; report?: CopyrightReport; error?: string }>(
+      `/api/admin/copyright-reports/${id}/review`,
+      { method: 'POST', headers, body: JSON.stringify(payload) }
+    );
+  },
+
+  async adminSetContentStatus(token: string | undefined, payload: {
+    targetType: string;
+    targetId: string;
+    status: string;
+    reason?: string;
+    adminEmail?: string;
+  }) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetchSafeJson<{ success: boolean; message?: string; error?: string }>(
+      '/api/admin/moderation/content-status',
+      { method: 'POST', headers, body: JSON.stringify(payload) }
+    );
+  },
+
+  async adminSetUserStatus(token: string | undefined, payload: {
+    userId: string;
+    status: string;
+    reason?: string;
+    adminEmail?: string;
+  }) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetchSafeJson<{ success: boolean; message?: string; error?: string }>(
+      '/api/admin/moderation/user-status',
+      { method: 'POST', headers, body: JSON.stringify(payload) }
+    );
+  },
+
+  async adminGetAuditLogs(token?: string, params?: { search?: string; action?: string }) {
+    try {
+      const q = new URLSearchParams();
+      if (params?.search) q.set('search', params.search);
+      if (params?.action) q.set('action', params.action);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      return fetchSafeJson<{ success: boolean; logs: ModerationAuditLog[] }>(
+        `/api/admin/audit-logs?${q.toString()}`,
+        { headers }
+      );
+    } catch {
+      return { success: true, logs: [] };
+    }
+  },
+
+  async adminGetSecurityFlags(token?: string, params?: { status?: string; severity?: string }) {
+    try {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.severity) q.set('severity', params.severity);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      return fetchSafeJson<{ success: boolean; flags: SecurityFlagRecord[] }>(
+        `/api/admin/security-flags?${q.toString()}`,
+        { headers }
+      );
+    } catch {
+      return { success: true, flags: [] };
+    }
+  },
+
+  async adminResolveSecurityFlag(token: string | undefined, id: string, payload: {
+    status?: string;
+    adminNotes?: string;
+    adminEmail?: string;
+  }) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetchSafeJson<{ success: boolean; flag?: SecurityFlagRecord; error?: string }>(
+      `/api/admin/security-flags/${id}/resolve`,
+      { method: 'POST', headers, body: JSON.stringify(payload) }
+    );
   },
 };
 

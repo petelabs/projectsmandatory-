@@ -40,6 +40,8 @@ export interface Song {
   boostPurchases?: number; // Purchases originating from boost referrals
   tags?: string[];
   moods?: string[];
+  moderationStatus?: 'APPROVED' | 'PENDING_REVIEW' | 'UNDER_REVIEW' | 'HIDDEN' | 'TAKEDOWN_COPYRIGHT';
+  moderationReason?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -61,6 +63,8 @@ export interface Album {
   isFeatured?: boolean;
   isNew?: boolean;
   playCount?: number;
+  moderationStatus?: 'APPROVED' | 'PENDING_REVIEW' | 'UNDER_REVIEW' | 'HIDDEN' | 'TAKEDOWN_COPYRIGHT';
+  moderationReason?: string;
   createdAt: string;
 }
 
@@ -80,6 +84,8 @@ export interface Playlist {
   songIds: string[];
   songs?: Song[];
   playCount?: number;
+  moderationStatus?: 'APPROVED' | 'UNDER_REVIEW' | 'HIDDEN';
+  moderationReason?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -950,5 +956,155 @@ export interface Phase2AdminSettings {
     platformFeePercent: number; // e.g., 10%
   };
 }
+
+// ==========================================
+// MODERATION, COPYRIGHT & REPORTING TYPES
+// ==========================================
+
+export type ContentReportReason =
+  | 'inappropriate_content'
+  | 'hate_speech'
+  | 'harassment'
+  | 'spam'
+  | 'impersonation'
+  | 'offensive_artwork'
+  | 'low_quality'
+  | 'scam'
+  | 'other';
+
+export type ContentReportTargetType = 'song' | 'album' | 'artist' | 'playlist' | 'user';
+
+export type ContentReportStatus = 'PENDING' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+
+export type ContentReportResolution =
+  | 'NONE'
+  | 'CONTENT_HIDDEN'
+  | 'CONTENT_RESTORED'
+  | 'ACCOUNT_SUSPENDED'
+  | 'ACCOUNT_REINSTATED'
+  | 'WARNING_ISSUED'
+  | 'DISMISSED';
+
+export interface ContentReport {
+  id: string;
+  reporterId: string;
+  reporterEmail: string;
+  reporterName: string;
+  targetType: ContentReportTargetType;
+  targetId: string;
+  targetTitle: string;
+  targetOwnerId?: string;
+  targetOwnerName?: string;
+  reason: ContentReportReason;
+  description: string;
+  status: ContentReportStatus;
+  resolutionAction?: ContentReportResolution;
+  moderationNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type CopyrightReportStatus =
+  | 'SUBMITTED'
+  | 'UNDER_REVIEW'
+  | 'MORE_INFO_REQUIRED'
+  | 'ACTION_TAKEN'
+  | 'REJECTED'
+  | 'CLOSED';
+
+export type CopyrightReportAction =
+  | 'NONE'
+  | 'CONTENT_TAKEDOWN'
+  | 'CONTENT_RESTORED'
+  | 'REJECTED_INVALID';
+
+export interface CopyrightReport {
+  id: string;
+  reporterId: string;
+  reporterEmail: string;
+  reporterName: string;
+  claimantName: string;
+  claimantEmail: string;
+  claimantPhone?: string;
+  targetType: 'song' | 'album' | 'artist';
+  targetId: string;
+  targetTitle: string;
+  originalWorkTitle: string;
+  originalWorkProofUrl: string;
+  infringementDescription: string;
+  declarationAccepted: boolean;
+  status: CopyrightReportStatus;
+  actionTaken?: CopyrightReportAction;
+  moderationNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type ModerationAuditAction =
+  | 'HIDE_CONTENT'
+  | 'RESTORE_CONTENT'
+  | 'SUSPEND_USER'
+  | 'REINSTATE_USER'
+  | 'DISMISS_REPORT'
+  | 'COPYRIGHT_TAKEDOWN'
+  | 'COPYRIGHT_RESTORE'
+  | 'REQUEST_MORE_INFO'
+  | 'RESOLVE_SECURITY_FLAG'
+  | 'UPDATE_MODERATION_STATUS';
+
+export interface ModerationAuditLog {
+  id: string;
+  adminEmail: string;
+  adminId?: string;
+  action: ModerationAuditAction;
+  targetType: 'song' | 'album' | 'artist' | 'playlist' | 'user' | 'report' | 'copyright';
+  targetId: string;
+  targetTitle: string;
+  reason: string;
+  timestamp: string;
+}
+
+export type SecurityFlagType =
+  | 'SPAM_UPLOADS'
+  | 'SUSPICIOUS_PROMOTIONS'
+  | 'REPEATED_REPORTS'
+  | 'SUSPICIOUS_PLAYLIST'
+  | 'ACCOUNT_ABUSE'
+  | 'ARTIFICIAL_STREAMS';
+
+export type SecuritySeverity = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface SecurityFlagRecord {
+  id: string;
+  targetType: 'user' | 'artist' | 'song' | 'playlist';
+  targetId: string;
+  targetTitle: string;
+  flagType: SecurityFlagType;
+  severity: SecuritySeverity;
+  details: string;
+  status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'DISMISSED';
+  reportedCount: number;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AdminDashboardMetrics {
+  totalUsers: number;
+  activeSubscribers: number;
+  verifiedArtists: number;
+  liveTracks: number;
+  liveAlbums: number;
+  pendingContentReports: number;
+  pendingCopyrightReports: number;
+  activeAbuseFlags: number;
+  totalRevenueMWK: number;
+  creatorRoyaltyPoolMWK: number;
+}
+
 
 

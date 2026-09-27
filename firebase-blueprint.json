@@ -464,6 +464,22 @@
     "/contactMessages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },
       "description": "User contact messages"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ContentReport" },
+      "description": "User and artist content moderation reports"
+    },
+    "/copyrightReports/{reportId}": {
+      "schema": { "$ref": "#/entities/CopyrightReport" },
+      "description": "Formal copyright infringement and takedown reports"
+    },
+    "/moderationActions/{actionId}": {
+      "schema": { "$ref": "#/entities/ModerationAuditLog" },
+      "description": "Audit trail for admin moderation and content actions"
+    },
+    "/securityFlags/{flagId}": {
+      "schema": { "$ref": "#/entities/SecurityFlag" },
+      "description": "Spam, abuse, and security moderation flags"
     }
   }
 }

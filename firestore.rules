@@ -200,6 +200,30 @@ service cloud.firestore {
       allow read, create, update, delete: if true;
     }
 
+    // Content Reports Collection (Users submit reports, read their own; Admin reviews)
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.reporterId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Copyright Reports & DMCA Takedown Queue (Claimants submit, read their own; Admin reviews)
+    match /copyrightReports/{reportId} {
+      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.reporterId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Moderation Audit Log (Strict Admin only)
+    match /moderationActions/{actionId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Platform Abuse & Security Flags (Strict Admin only)
+    match /securityFlags/{flagId} {
+      allow read, write: if isAdmin();
+    }
+
     // Server-only Collections
     match /paymentEvents/{eventId} {
       allow read, write: if false;

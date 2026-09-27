@@ -9,12 +9,14 @@ import {
   Download,
   X,
   ListMusic,
+  ShieldAlert,
 } from 'lucide-react';
 import { Song } from '../../types';
 import { usePlayback } from '../../context/PlaybackContext';
 import { useToast } from '../../context/ToastContext';
 import { AddToPlaylistModal } from './AddToPlaylistModal';
 import { ShareModal } from './ShareModal';
+import { ReportContentModal } from '../moderation/ReportContentModal';
 
 interface SongActionMenuModalProps {
   song: Song | null;
@@ -36,6 +38,7 @@ export const SongActionMenuModal: React.FC<SongActionMenuModalProps> = ({
 
   const [isAddToPlaylistOpen, setIsAddToPlaylistOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   if (!isOpen || !song) return null;
 
@@ -220,6 +223,16 @@ export const SongActionMenuModal: React.FC<SongActionMenuModalProps> = ({
                 </div>
                 <span>Share Song</span>
               </button>
+
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-300 hover:text-white hover:bg-slate-800/70 transition text-xs font-semibold"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <span>Report Track / Copyright Claim</span>
+              </button>
             </div>
 
             <div className="py-1">
@@ -261,6 +274,17 @@ export const SongActionMenuModal: React.FC<SongActionMenuModalProps> = ({
           coverImage: song.coverImage,
           rawItem: song,
         }}
+      />
+
+      {/* Report / Copyright Modal */}
+      <ReportContentModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        targetType="song"
+        targetId={song.id}
+        targetTitle={song.title}
+        targetOwnerId={song.artistId}
+        targetOwnerName={song.artist}
       />
     </>
   );
