@@ -52,6 +52,7 @@ import { ArtistStudioPage } from './pages/artist/ArtistStudioPage';
 import { ArtistsListPage } from './pages/artist/ArtistsListPage';
 import { ArtistProfilePage } from './pages/artist/ArtistProfilePage';
 import { PricingPlansPage } from './components/monetization/PricingPlansPage';
+import { ListenerOnboardingModal } from './components/onboarding/ListenerOnboardingModal';
 
 function AppContent() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
@@ -66,6 +67,13 @@ function AppContent() {
   const [completedPurchaseToken, setCompletedPurchaseToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pm_onboarding_completed') !== 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const { isAdminAuthenticated } = useAdmin();
   const { isDark } = useTheme();
@@ -551,6 +559,13 @@ function AppContent() {
 
         {/* Full-Screen Dark Immersive Now Playing Modal */}
         <NowPlayingModal onNavigate={navigate} />
+
+        {/* Listener Onboarding Flow Modal */}
+        <ListenerOnboardingModal
+          isOpen={showOnboarding}
+          onClose={() => setShowOnboarding(false)}
+          onComplete={() => setShowOnboarding(false)}
+        />
 
         {/* Offline Status */}
         <OfflineIndicator />

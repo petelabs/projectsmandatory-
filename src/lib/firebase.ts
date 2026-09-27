@@ -1511,4 +1511,87 @@ export function subscribeModerationAuditLogs(
   );
 }
 
+// Update User Profile in Firestore
+export async function updateFirestoreUserProfile(
+  userId: string,
+  updates: Partial<UserProfile>
+): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await setDoc(userRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Could not update Firestore user profile:', err);
+  }
+}
+
+// Delete User Account and Associated Data from Firestore
+export async function deleteUserFirestoreAccount(userId: string): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await deleteDoc(userRef);
+
+    // Also remove artist document if one exists for this user
+    const artistRef = doc(db, 'artists', userId);
+    const artistSnap = await getDoc(artistRef);
+    if (artistSnap.exists()) {
+      await deleteDoc(artistRef);
+    }
+  } catch (err) {
+    console.error('Error deleting user Firestore account:', err);
+    throw err;
+  }
+}
+
+// Upload file to Cloudflare R2 or Firebase Storage
+export async function uploadFileToR2OrStorage(
+  file: File,
+  path: string,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  try {
+    const fileRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(fileRef, file, {
+      contentType: file.type || 'application/octet-stream',
+    });
+
+    return await new Promise((resolve) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) onProgress(Math.round(progress));
+        },
+        () => {
+          // Fallback to data url if storage offline
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string) || '');
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        },
+        async () => {
+          try {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(url);
+          } catch {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string) || '');
+            reader.readAsDataURL(file);
+          }
+        }
+      );
+    });
+  } catch {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
+
 

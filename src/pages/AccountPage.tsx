@@ -18,8 +18,8 @@ import {
   ExternalLink,
   Gift,
   Users,
-  Smartphone,
-  Wifi,
+  FileDown,
+  Edit3,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -28,10 +28,11 @@ import { useTheme } from '../context/ThemeContext';
 import { useAdmin } from '../context/AdminContext';
 import { useToast } from '../context/ToastContext';
 import { useDataSaver } from '../context/DataSaverContext';
-import { PWAInstallButton } from '../components/common/PWAInstallButton';
 import { GiftSubscriptionModal } from '../components/monetization/GiftSubscriptionModal';
 import { ClaimGiftModal } from '../components/monetization/ClaimGiftModal';
 import { FamilyPlanModal } from '../components/monetization/FamilyPlanModal';
+import { EditProfileModal } from '../components/account/EditProfileModal';
+import { PrivacySecurityModal } from '../components/account/PrivacySecurityModal';
 
 interface AccountPageProps {
   onNavigate: (path: string) => void;
@@ -47,6 +48,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
   const { isDataSaverEnabled, toggleDataSaver } = useDataSaver();
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [showClaimGiftModal, setShowClaimGiftModal] = useState(false);
   const [showFamilyModal, setShowFamilyModal] = useState(false);
@@ -54,6 +57,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
   const displayName = user?.name || 'Chipo M.';
   const displayEmail = user?.email || 'chipo@example.com';
   const displayAvatar =
+    user?.avatarUrl ||
     user?.photoURL ||
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop';
 
@@ -70,9 +74,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     },
     {
       id: 'downloads',
-      label: 'Downloads',
+      label: 'Downloads & Offline Storage',
       count: `${offlineSongs.length} songs`,
-      action: () => onNavigate('/library'),
+      action: () => setShowPrivacyModal(true),
       icon: Download,
     },
     {
@@ -88,6 +92,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
       count: currentTier === 'FREE' ? 'Free Pass' : currentTier.replace('_', ' '),
       action: () => onNavigate('/pricing'),
       icon: Crown,
+    },
+    {
+      id: 'privacy',
+      label: 'Privacy & Account Controls',
+      count: 'Data & Security',
+      action: () => setShowPrivacyModal(true),
+      icon: ShieldCheck,
     },
     {
       id: 'family',
@@ -123,11 +134,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
     <div className="space-y-5 pb-8 text-left">
       
       {/* ===================================================
-          PROFILE HEADER: AVATAR, NAME, EMAIL, SETTINGS GEAR
+          PROFILE HEADER: AVATAR, NAME, EMAIL, EDIT & SETTINGS
           =================================================== */}
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
-          <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-800 ring-4 ring-[#1455D9]/30">
+          <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-800 ring-4 ring-[#1455D9]/30 flex-shrink-0">
             <img
               src={displayAvatar}
               alt={displayName}
@@ -136,21 +147,28 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
             />
           </div>
 
-          <div className="text-left">
+          <div className="text-left min-w-0">
             <h1
-              className={`text-lg sm:text-xl font-extrabold tracking-tight leading-tight ${
+              className={`text-lg sm:text-xl font-extrabold tracking-tight leading-tight truncate ${
                 isDark ? 'text-white' : 'text-[#111827]'
               }`}
             >
               {displayName}
             </h1>
-            <p className="text-xs text-slate-400">{displayEmail}</p>
+            <p className="text-xs text-slate-400 truncate">{displayEmail}</p>
+            <button
+              onClick={() => setShowEditProfileModal(true)}
+              className="text-[11px] font-bold text-[#1455D9] hover:underline flex items-center gap-1 mt-0.5"
+            >
+              <Edit3 className="w-3 h-3" />
+              <span>Edit Profile</span>
+            </button>
           </div>
         </div>
 
         {/* Settings Gear */}
         <button
-          onClick={() => setShowSettingsModal(true)}
+          onClick={() => setShowPrivacyModal(true)}
           className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full transition active:scale-95 ${
             isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-200'
           }`}
@@ -437,6 +455,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({ onNavigate }) => {
         <FamilyPlanModal
           isOpen={showFamilyModal}
           onClose={() => setShowFamilyModal(false)}
+        />
+      )}
+
+      {/* Edit Profile Modal */}
+      {showEditProfileModal && (
+        <EditProfileModal
+          isOpen={showEditProfileModal}
+          onClose={() => setShowEditProfileModal(false)}
+        />
+      )}
+
+      {/* Privacy & Account Controls Modal */}
+      {showPrivacyModal && (
+        <PrivacySecurityModal
+          isOpen={showPrivacyModal}
+          onClose={() => setShowPrivacyModal(false)}
         />
       )}
 
